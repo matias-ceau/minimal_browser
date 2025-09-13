@@ -6,11 +6,27 @@ import os
 import time
 import base64
 import requests
-from PyQt6.QtCore import QUrl, Qt, QTimer, QThread, pyqtSignal, QPropertyAnimation, QEasingCurve
-from PyQt6.QtGui import QKeySequence, QShortcut, QFont, QPainter, QColor
-from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QLabel, QLineEdit, QTextEdit, QScrollArea
-from PyQt6.QtWebEngineWidgets import QWebEngineView
-from PyQt6.QtWebEngineCore import QWebEngineProfile, QWebEngineSettings
+
+# Fix for Python 3.13 compatibility
+os.environ.setdefault('QT_API', 'pyside6')
+
+# Native Wayland support
+os.environ.setdefault('QT_QPA_PLATFORM', 'wayland')
+os.environ.setdefault('QTWEBENGINE_CHROMIUM_FLAGS', 
+    '--no-sandbox --disable-dev-shm-usage --disable-gpu --disable-gpu-compositing --enable-software-rasterizer --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows')
+
+# Hyprland-specific fixes
+os.environ.setdefault('QT_WAYLAND_DISABLE_WINDOWDECORATION', '0')
+os.environ.setdefault('WAYLAND_DISPLAY', os.environ.get('WAYLAND_DISPLAY', 'wayland-0'))
+os.environ.setdefault('QT_SCALE_FACTOR', '1')
+os.environ.setdefault('WLR_NO_HARDWARE_CURSORS', '1')  # Hyprland compatibility
+os.environ.setdefault('QT_WAYLAND_FORCE_DPI', '96')
+
+from PySide6.QtCore import QUrl, Qt, QTimer, QThread, Signal as pyqtSignal, QPropertyAnimation, QEasingCurve
+from PySide6.QtGui import QKeySequence, QShortcut, QFont, QPainter, QColor
+from PySide6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QLabel, QLineEdit, QTextEdit, QScrollArea
+from PySide6.QtWebEngineWidgets import QWebEngineView
+from PySide6.QtWebEngineCore import QWebEngineProfile, QWebEngineSettings
 
 
 class AIWorker(QThread):
@@ -528,22 +544,32 @@ class VimBrowser(QMainWindow):
 
         
         # Create web view with optimized settings
-        self.browser = QWebEngineView()
-        
-        # Optimize web engine settings for speed
-        settings = self.browser.settings()
-        settings.setAttribute(QWebEngineSettings.WebAttribute.PluginsEnabled, False)
-        settings.setAttribute(QWebEngineSettings.WebAttribute.JavascriptEnabled, True)
-        settings.setAttribute(QWebEngineSettings.WebAttribute.LocalStorageEnabled, True)
-        settings.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessRemoteUrls, True)
-        settings.setAttribute(QWebEngineSettings.WebAttribute.XSSAuditingEnabled, False)
-        settings.setAttribute(QWebEngineSettings.WebAttribute.SpatialNavigationEnabled, False)
-        settings.setAttribute(QWebEngineSettings.WebAttribute.HyperlinkAuditingEnabled, False)
-        
-        # Use default profile for better caching
-        profile = QWebEngineProfile.defaultProfile()
-        profile.setHttpCacheType(QWebEngineProfile.HttpCacheType.MemoryHttpCache)
-        profile.setHttpCacheMaximumSize(50 * 1024 * 1024)  # 50MB cache
+        print("Initializing QWebEngineView...")
+        try:
+            self.browser = QWebEngineView()
+            print("QWebEngineView created successfully")
+            
+            # Optimize web engine settings for speed
+            settings = self.browser.settings()
+            settings.setAttribute(QWebEngineSettings.WebAttribute.PluginsEnabled, False)
+            settings.setAttribute(QWebEngineSettings.WebAttribute.JavascriptEnabled, True)
+            settings.setAttribute(QWebEngineSettings.WebAttribute.LocalStorageEnabled, True)
+            settings.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessRemoteUrls, True)
+            settings.setAttribute(QWebEngineSettings.WebAttribute.XSSAuditingEnabled, False)
+            settings.setAttribute(QWebEngineSettings.WebAttribute.SpatialNavigationEnabled, False)
+            settings.setAttribute(QWebEngineSettings.WebAttribute.HyperlinkAuditingEnabled, False)
+            print("WebEngine settings configured")
+            
+            # Use default profile for better caching
+            profile = QWebEngineProfile.defaultProfile()
+            profile.setHttpCacheType(QWebEngineProfile.HttpCacheType.MemoryHttpCache)
+            profile.setHttpCacheMaximumSize(50 * 1024 * 1024)  # 50MB cache
+            print("WebEngine profile configured")
+            
+        except Exception as e:
+            print(f"WebEngine initialization error: {e}")
+            # Fallback: create a basic web view without advanced settings
+            self.browser = QWebEngineView()
         
         self.setCentralWidget(self.browser)
         
@@ -573,8 +599,14 @@ class VimBrowser(QMainWindow):
         self.mode_timer.timeout.connect(self.hide_mode_indicator)
         self.mode_timer.setSingleShot(True)
         
+        # Connect load signals for debugging
+        self.browser.loadStarted.connect(lambda: print("Page load started"))
+        self.browser.loadProgress.connect(lambda p: print(f"Load progress: {p}%"))
+        self.browser.loadFinished.connect(lambda ok: print(f"Page load finished: {'SUCCESS' if ok else 'FAILED'}"))
+        
         # Load initial URL
         initial_url = sys.argv[1] if len(sys.argv) > 1 else "https://www.google.com"
+        print(f"Loading initial URL: {initial_url}")
         self.open_url(initial_url)
         
         # Set up vim-like keybindings
@@ -972,7 +1004,7 @@ class VimBrowser(QMainWindow):
             if hasattr(page, 'setDevToolsPage'):
                 # Create dev tools window if it doesn't exist
                 if not hasattr(self, 'dev_tools'):
-                    from PyQt6.QtWebEngineWidgets import QWebEngineView
+                    from PySide6.QtWebEngineWidgets import QWebEngineView
                     self.dev_tools = QWebEngineView()
                     self.dev_tools.setWindowTitle("Developer Tools")
                     self.dev_tools.resize(800, 600)
@@ -1188,9 +1220,28 @@ class VimBrowser(QMainWindow):
 </html>""".replace('\n', '').replace('"', '%22')
 
 
-if __name__ == "__main__":
+def main():
+    # Python 3.13 + Qt compatibility fixes
+    if hasattr(Qt, 'AA_ShareOpenGLContexts'):
+        QApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts)
+    
+    # Wayland-specific Qt fixes
+    QApplication.setAttribute(Qt.ApplicationAttribute.AA_UseHighDpiPixmaps)
+    if hasattr(Qt.ApplicationAttribute, 'AA_EnableHighDpiScaling'):
+        QApplication.setAttribute(Qt.ApplicationAttribute.AA_EnableHighDpiScaling)
+    
     # Set up application with optimizations
     app = QApplication(sys.argv)
+    app.setApplicationName("Minimal Browser")
+    app.setApplicationVersion("0.2.0")
+    
+    # Additional Qt WebEngine fixes for Python 3.13 + Wayland
+    try:
+        from PySide6.QtWebEngineCore import QWebEngineSettings
+        # Skip global settings - they're not needed and the method name varies
+        print("Skipping global WebEngine settings (not critical)")
+    except Exception as e:
+        print(f"WebEngine settings warning: {e}")
     
     # Create and show browser
     browser = VimBrowser()
