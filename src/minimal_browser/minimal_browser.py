@@ -714,8 +714,9 @@ class VimBrowser(QMainWindow):
     def show_help(self):
         if self.mode == "NORMAL":
             help_content = self.get_help_content()
-            # Create a data URL with the help content
-            help_url = f"data:text/html;charset=utf-8,{help_content}"
+            # Create a data URL with base64 encoding
+            encoded_html = base64.b64encode(help_content.encode('utf-8')).decode('ascii')
+            help_url = f"data:text/html;base64,{encoded_html}"
             self.open_url(help_url)
     
     def show_command_line(self, prefix):
@@ -1167,7 +1168,7 @@ class VimBrowser(QMainWindow):
     <div class="section">
         <h2>Developer Tools</h2>
         <table>
-            <tr><td><span class="key">F10</span></td><td>Toggle developer tools</td></tr>
+            <tr><td><span class="key">F12</span></td><td>Toggle developer tools</td></tr>
             <tr><td><span class="key">Ctrl+U</span></td><td>View page source</td></tr>
             <tr><td><span class="key">Ctrl+I</span></td><td>Show debug info</td></tr>
         </table>
@@ -1178,10 +1179,10 @@ class VimBrowser(QMainWindow):
         <table>
             <tr><td><span class="key">Space</span></td><td>Ask AI anything - it can navigate or create content</td></tr>
             <tr><td colspan="2">Examples:</td></tr>
-            <tr><td></td><td>"navigate to github" → Opens GitHub</td></tr>
-            <tr><td></td><td>"create a todo list" → Generates interactive todo app</td></tr>
-            <tr><td></td><td>"make a calculator" → Creates working calculator</td></tr>
-            <tr><td></td><td>"explain quantum physics" → Generates explanation page</td></tr>
+            <tr><td></td><td>"navigate to github" &rarr; Opens GitHub</td></tr>
+            <tr><td></td><td>"create a todo list" &rarr; Generates interactive todo app</td></tr>
+            <tr><td></td><td>"make a calculator" &rarr; Creates working calculator</td></tr>
+            <tr><td></td><td>"explain quantum physics" &rarr; Generates explanation page</td></tr>
         </table>
     </div>
     
@@ -1207,17 +1208,17 @@ class VimBrowser(QMainWindow):
     
     <div class="section">
         <h2>Examples</h2>
-        <p><span class="key">s python tutorial</span> → Google search</p>
-        <p><span class="key">s github.com</span> → Open GitHub</p>
-        <p><span class="key">a explain quantum computing</span> → Ask ChatGPT</p>
-        <p><span class="key">Space navigate to reddit</span> → AI opens Reddit</p>
-        <p><span class="key">Space create a calculator</span> → AI generates calculator</p>
-        <p><span class="key">o reddit.com</span> → Open Reddit</p>
+        <p><span class="key">s python tutorial</span> &rarr; Google search</p>
+        <p><span class="key">s github.com</span> &rarr; Open GitHub</p>
+        <p><span class="key">a explain quantum computing</span> &rarr; Ask ChatGPT</p>
+        <p><span class="key">Space navigate to reddit</span> &rarr; AI opens Reddit</p>
+        <p><span class="key">Space create a calculator</span> &rarr; AI generates calculator</p>
+        <p><span class="key">o reddit.com</span> &rarr; Open Reddit</p>
     </div>
     
     <p style="margin-top: 40px; color: #666;">Press <span class="key">Escape</span> to return to normal browsing</p>
 </body>
-</html>""".replace('\n', '').replace('"', '%22')
+</html>"""
 
 
 def main():
