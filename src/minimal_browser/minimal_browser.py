@@ -22,11 +22,13 @@ os.environ.setdefault('QT_SCALE_FACTOR', '1')
 os.environ.setdefault('WLR_NO_HARDWARE_CURSORS', '1')  # Hyprland compatibility
 os.environ.setdefault('QT_WAYLAND_FORCE_DPI', '96')
 
-from PySide6.QtCore import QUrl, Qt, QTimer, QThread, Signal as pyqtSignal, QPropertyAnimation, QEasingCurve
+from PySide6.QtCore import QUrl, Qt, QTimer, QThread, Signal as pyqtSignal
 from PySide6.QtGui import QKeySequence, QShortcut, QFont, QPainter, QColor
 from PySide6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QLabel, QLineEdit, QTextEdit, QScrollArea
 from PySide6.QtWebEngineWidgets import QWebEngineView
-from PySide6.QtWebEngineCore import QWebEngineProfile, QWebEngineSettings
+from PySide6.QtWebEngineCore import QWebEngineProfile, QWebEngineSettings, QWebEnginePage
+import os
+from src.storage.conversations import ConversationLog
 
 
 class AIWorker(QThread):
@@ -541,13 +543,55 @@ class VimBrowser(QMainWindow):
         
         # AI integration
         self.ai_worker = None
+        self.last_query = None
+        # Conversation logging
+        conv_path = os.path.join(os.path.expanduser("~"), ".config", "minimal-browser", "conversations.json")
+        self.conversation_log = ConversationLog(conv_path)
 
+        # Loading overlay for AI responses
+        self.loading_overlay = QLabel(self)
+        self.loading_overlay.setStyleSheet("""
+            QLabel {
+                background-color: rgba(0, 0, 0, 0.7);
+                color: white;
+                border: none;
+                font-size: 16px;
+                font-family: monospace;
+            }
+            QLabel::before {
+                content: "🤖 AI Thinking...";
+                display: block;
+                position: absolute;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                animation: spin 1s linear infinite;
+            }
+            @keyframes spin {
+                0% { transform: translate(-50%, -50%) rotate(0deg); }
+                100% { transform: translate(-50%, -50%) rotate(360deg); }
+            }
+        """)
+        self.loading_overlay.setAlignment(Qt.AlignCenter)
+        self.loading_overlay.hide()
+        self.loading_overlay.raise_()
         
+        self.initial_load = True
+
+        # Create persistent profile for cookies
+        self.profile = QWebEngineProfile()
+        self.profile.setPersistentCookiesPolicy(QWebEngineProfile.ForcePersistentCookies)
+        self.profile.setPersistentStoragePath(os.path.join(os.path.expanduser("~"), ".minimal-browser"))
+
         # Create web view with optimized settings
         print("Initializing QWebEngineView...")
         try:
             self.browser = QWebEngineView()
             print("QWebEngineView created successfully")
+            
+            # Create page with persistent profile
+            self.page = QWebEnginePage(self.profile, self)
+            self.browser.setPage(self.page)
             
             # Optimize web engine settings for speed
             settings = self.browser.settings()
@@ -560,11 +604,10 @@ class VimBrowser(QMainWindow):
             settings.setAttribute(QWebEngineSettings.WebAttribute.HyperlinkAuditingEnabled, False)
             print("WebEngine settings configured")
             
-            # Use default profile for better caching
-            profile = QWebEngineProfile.defaultProfile()
-            profile.setHttpCacheType(QWebEngineProfile.HttpCacheType.MemoryHttpCache)
-            profile.setHttpCacheMaximumSize(50 * 1024 * 1024)  # 50MB cache
-            print("WebEngine profile configured")
+            # Use custom profile for caching
+            self.profile.setHttpCacheType(QWebEngineProfile.HttpCacheType.DiskHttpCache)
+            self.profile.setHttpCacheMaximumSize(50 * 1024 * 1024)  # 50MB cache
+            print("Persistent profile configured")
             
         except Exception as e:
             print(f"WebEngine initialization error: {e}")
@@ -572,7 +615,6 @@ class VimBrowser(QMainWindow):
             self.browser = QWebEngineView()
         
         self.setCentralWidget(self.browser)
-        
         # Hide all UI elements
         self.setMenuBar(None)
         self.statusBar().hide()
@@ -674,6 +716,9 @@ class VimBrowser(QMainWindow):
                 (self.width() - width) // 2,
                 self.height() - 50
             )
+        # Resize loading overlay
+        if hasattr(self, 'loading_overlay'):
+            self.loading_overlay.resize(self.size())
     
     def normal_mode(self):
         self.mode = "NORMAL"
@@ -796,8 +841,6 @@ class VimBrowser(QMainWindow):
                 url = 'https://' + url
             qurl = QUrl(url)
         
-        self.browser.load(qurl)
-        
         # Add to buffers if not already there
         if url not in self.buffers:
             self.buffers.append(url)
@@ -805,6 +848,12 @@ class VimBrowser(QMainWindow):
         else:
             self.current_buffer = self.buffers.index(url)
         
+        if self.initial_load:
+            self.browser.load(qurl)
+            self.initial_load = False
+        else:
+            self.setWindowTitle("Switching...")
+            self.browser.load(qurl)
         self.update_title()
     
     def reload_page(self):
@@ -836,18 +885,40 @@ class VimBrowser(QMainWindow):
     def next_buffer(self):
         if self.mode == "NORMAL" and len(self.buffers) > 1:
             self.current_buffer = (self.current_buffer + 1) % len(self.buffers)
+            self.setWindowTitle("Switching buffer...")
             self.browser.load(QUrl(self.buffers[self.current_buffer]))
             self.update_title()
     
     def prev_buffer(self):
         if self.mode == "NORMAL" and len(self.buffers) > 1:
             self.current_buffer = (self.current_buffer - 1) % len(self.buffers)
+            self.setWindowTitle("Switching buffer...")
             self.browser.load(QUrl(self.buffers[self.current_buffer]))
             self.update_title()
     
     def scroll_page(self, pixels):
         if self.mode == "NORMAL":
-            self.browser.page().runJavaScript(f"window.scrollBy(0, {pixels});")
+            # Smoother scrolling with easing
+            direction = 1 if pixels > 0 else -1
+            distance = abs(pixels)
+            js = f"""
+            function smoothScroll() {{
+                let start = window.pageYOffset;
+                let current = start;
+                let step = {direction} * Math.min(20, {distance});
+                function animate() {{
+                    current += step;
+                    window.scrollTo(0, current);
+                    let remaining = Math.abs({distance} - Math.abs(current - start));
+                    if (remaining > 0) {{
+                        requestAnimationFrame(animate);
+                    }}
+                }}
+                animate();
+            }}
+            smoothScroll();
+            """
+            self.browser.page().runJavaScript(js)
     
     def scroll_top(self):
         if self.mode == "NORMAL":
@@ -940,9 +1011,17 @@ class VimBrowser(QMainWindow):
         if not query:
             return
         
+        self.last_query = query
         print(f"AI Chat Query: {query}")  # Debug logging
+        # Log query start
+        self.conversation_log.append(query, None)
         
-        # Show loading state
+        # Show loading overlay
+        self.loading_overlay.resize(self.size())
+        self.loading_overlay.show()
+        self.loading_overlay.raise_()
+        
+        # Show loading state in title
         self.setWindowTitle("🤖 AI Thinking...")
         
         # Get current page URL for context
@@ -957,6 +1036,9 @@ class VimBrowser(QMainWindow):
     def handle_ai_response(self, response_type, content):
         """Handle AI response"""
         print(f"AI Response: {response_type} - {content[:100]}...")  # Debug logging
+        
+        # Hide loading overlay
+        self.loading_overlay.hide()
         
         if response_type == "error":
             self.setWindowTitle(f"AI Error: {content}")
@@ -990,6 +1072,12 @@ class VimBrowser(QMainWindow):
             data_url = f"data:text/html;base64,{encoded_html}"
             self.open_url(data_url)
         
+        # Log final response
+        try:
+            if self.last_query:
+                self.conversation_log.update_last_response(content)
+        except Exception as e:
+            print(f"Conversation log error: {e}")
         self.update_title()
     
     def update_progress(self, message):
@@ -1025,6 +1113,23 @@ class VimBrowser(QMainWindow):
             # Get the HTML source of current page
             self.browser.page().toHtml(self.show_source_in_new_buffer)
     
+    def show_buffer_overlay(self):
+        """Show overlay during buffer switch"""
+        self.buffer_overlay.resize(self.size())
+        self.buffer_overlay.show()
+        self.buffer_overlay.raise_()
+    
+    def hide_buffer_overlay(self):
+        """Hide buffer overlay after load"""
+        self.buffer_overlay.hide()
+    
+    def on_load_finished(self, ok):
+        print(f"Page load finished: {'SUCCESS' if ok else 'FAILED'}")
+        if self.initial_load and ok:
+            self.initial_load = False
+        else:
+            self.setWindowTitle(self.update_title())
+
     def show_source_in_new_buffer(self, html):
         """Show HTML source in a new buffer"""
         # Create a simple HTML viewer for the source
@@ -1067,14 +1172,15 @@ class VimBrowser(QMainWindow):
         <h2>📄 Page Source</h2>
         <p>Current page HTML source ({len(html)} characters)</p>
     </div>
-    <pre>{html.replace('<', '&lt;').replace('>', '&gt;')}</pre>
+    <pre>{html.replace('<', '<').replace('>', '>')}</pre>
 </body>
 </html>"""
         
         # Create data URL and open in new buffer
         encoded_html = base64.b64encode(source_html.encode('utf-8')).decode('ascii')
         data_url = f"data:text/html;base64,{encoded_html}"
-        self.open_url(data_url)
+        self.setWindowTitle("Loading source...")
+        self.browser.load(QUrl(data_url))
         print(f"Source view created: {len(html)} characters")
     
     def show_debug_info(self):
@@ -1233,8 +1339,15 @@ def main():
     
     # Set up application with optimizations
     app = QApplication(sys.argv)
+    from PySide6.QtWebEngineCore import QWebEngineProfile
+    QWebEngineProfile.defaultProfile().setPersistentCookiesPolicy(QWebEngineProfile.ForcePersistentCookies)
     app.setApplicationName("Minimal Browser")
     app.setApplicationVersion("0.2.0")
+    
+    from PySide6.QtWebEngineCore import QWebEngineProfile
+    
+    QWebEngineProfile.defaultProfile().setPersistentCookiesPolicy(QWebEngineProfile.ForcePersistentCookies)
+    QWebEngineProfile.defaultProfile().setPersistentStoragePath(os.path.join(os.path.expanduser("~"), ".config", "minimal-browser"))
     
     # Additional Qt WebEngine fixes for Python 3.13 + Wayland
     try:
