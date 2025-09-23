@@ -5,24 +5,19 @@ import json
 import os
 import time
 import base64
-import requests
+import requests  # type: ignore[import-untyped]
+from typing import Any
+import os
+from typing import cast, MutableMapping, Any
 
-# Fix for Python 3.13 compatibility
-os.environ.setdefault("QT_API", "pyside6")
-
-# Native Wayland support
-os.environ.setdefault("QT_QPA_PLATFORM", "wayland")
-os.environ.setdefault(
-    "QTWEBENGINE_CHROMIUM_FLAGS",
-    "--no-sandbox --disable-dev-shm-usage --disable-gpu --disable-gpu-compositing --enable-software-rasterizer --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows",
-)
-
-# Hyprland-specific fixes
-os.environ.setdefault("QT_WAYLAND_DISABLE_WINDOWDECORATION", "0")
-os.environ.setdefault("WAYLAND_DISPLAY", os.environ.get("WAYLAND_DISPLAY", "wayland-0"))
-os.environ.setdefault("QT_SCALE_FACTOR", "1")
-os.environ.setdefault("WLR_NO_HARDWARE_CURSORS", "1")  # Hyprland compatibility
-os.environ.setdefault("QT_WAYLAND_FORCE_DPI", "96")
+# Fix for Python 3.13 compatibility and Wayland envs
+environ: MutableMapping[str, str] = cast(MutableMapping[str, str], os.environ)
+environ.setdefault("QT_API", "pyside6")
+environ.setdefault("QT_QPA_PLATFORM", "wayland")
+environ.setdefault("WAYLAND_DISPLAY", environ.get("WAYLAND_DISPLAY", "wayland-0"))
+environ.setdefault("qt-scale-factor", "1")
+environ.setdefault("WLR_NO_HARDWARE_CURSORS", "1")
+# environ.setdefault("QT_WAYLAND_FORCE_DPI", "96")  # optional
 
 from PySide6.QtCore import QUrl, Qt, QTimer, QThread, Signal as pyqtSignal
 from PySide6.QtGui import QKeySequence, QShortcut, QFont, QPainter, QColor
@@ -35,6 +30,10 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QTextEdit,
     QScrollArea,
+    QHBoxLayout,
+    QPushButton,
+    QTabBar,
+    QProgressBar,
 )
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWebEngineCore import (
@@ -42,10 +41,17 @@ from PySide6.QtWebEngineCore import (
     QWebEngineSettings,
     QWebEnginePage,
 )
-import os
 
-# Prefer package‑relative import to avoid "No module named src"
-from minimal_browser.storage.conversations import ConversationLog
+from .engines.qt_engine import QtWebEngine
+from .ai.schemas import ConversationMemory  # type: ignore[attr-defined]
+from .ai.tools import ResponseProcessor
+from .storage.conversations import ConversationLog
+
+
+def to_data_url(html: str) -> str:
+    """Encode HTML content into a data URL with base64 encoding"""
+    encoded_html = base64.b64encode(html.encode("utf-8")).decode("ascii")
+    return f"data:text/html;base64,{encoded_html}"
 
 
 class AIWorker(QThread):
@@ -149,123 +155,22 @@ Current page context: """ + (current_url if current_url else "No current page")
                     except Exception:
                         break
 
-        # If response doesn't start with our expected formats, treat as HTML
+        # If response doesn't match our expected formats, promote it to HTML
         if not any(
             ai_response.startswith(prefix)
             for prefix in ["NAVIGATE:", "SEARCH:", "HTML:"]
         ):
             ai_response = f"HTML:{self.wrap_response_in_html(ai_response, query)}"
 
-        return ai_response
-
-    def removed_fallback_function(self, query):
-        """Fallback response when API is not available"""
-        print(f"Using fallback response for: {query}")
-        query_lower = query.lower()
-
-        if "navigate" in query_lower or "go to" in query_lower or "open" in query_lower:
-            if "github" in query_lower:
-                return "NAVIGATE:https://github.com"
-            elif "reddit" in query_lower:
-                return "NAVIGATE:https://reddit.com"
-            elif "youtube" in query_lower:
-                return "NAVIGATE:https://youtube.com"
-            elif "google" in query_lower:
-                return "NAVIGATE:https://google.com"
-            else:
-                return f"SEARCH:{query}"
-
-        elif (
-            "html" in query_lower
-            or "create" in query_lower
-            or "make" in query_lower
-            or "generate" in query_lower
-        ):
-            if "todo" in query_lower or "list" in query_lower:
-                return self.generate_todo_html()
-            elif "calculator" in query_lower:
-                return self.generate_calculator_html()
-            else:
-                # For any HTML request, create a simple HTML page
-                html_content = f"""<!DOCTYPE html>
-<html>
-<head>
-    <title>AI Generated Page</title>
-    <style>
-        body {{
-            font-family: system-ui, -apple-system, sans-serif;
-            margin: 0;
-            padding: 40px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }}
-        .card {{
-            background: rgba(255, 255, 255, 0.15);
-            backdrop-filter: blur(10px);
-            padding: 40px;
-            border-radius: 20px;
-            text-align: center;
-            max-width: 600px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-        }}
-        h1 {{
-            font-size: 2.5em;
-            margin-bottom: 20px;
-            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-        }}
-        p {{
-            font-size: 1.2em;
-            line-height: 1.6;
-            margin-bottom: 20px;
-        }}
-        button {{
-            background: #4CAF50;
-            color: white;
-            border: none;
-            padding: 15px 30px;
-            font-size: 16px;
-            border-radius: 25px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }}
-        button:hover {{
-            background: #45a049;
-            transform: translateY(-2px);
-        }}
-        .query {{
-            background: rgba(0, 0, 0, 0.2);
-            padding: 15px;
-            border-radius: 10px;
-            margin: 20px 0;
-            font-style: italic;
-        }}
-    </style>
-</head>
-<body>
-    <div class="card">
-        <h1>🤖 AI Generated Content</h1>
-        <div class="query">Your request: "{query}"</div>
-        <p>Success! I've created this HTML page for you.</p>
-        <p>This demonstrates that the AI can generate custom web content directly in the browser.</p>
-        <button onclick="alert('Hello from the AI! 🤖')">Click me!</button>
-        <p style="margin-top: 30px; font-size: 0.9em; opacity: 0.8;">
-            Try asking me to create other things like "make a calculator" or "create a todo list"
-        </p>
-    </div>
-</body>
-</html>"""
-                return f"HTML:{html_content}"
-
-        else:
-            # Default: search for simple queries, create info page for complex ones
-            if len(query.split()) <= 3:
-                return f"SEARCH:{query}"
-            else:
-                return f"HTML:<!DOCTYPE html><html><head><title>AI Response</title><style>body{{font-family:system-ui;padding:40px;background:#f0f0f0;color:#333;}}.container{{max-width:800px;margin:0 auto;background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,0.1);}}</style></head><body><div class='container'><h1>🤖 AI Response</h1><p><strong>Your query:</strong> {query}</p><p>This is a response generated by the AI assistant. In a full implementation, this would be a more detailed and contextual response.</p></div></body></html>"
+        action = ResponseProcessor.parse_response(ai_response)
+        action_type, payload = ResponseProcessor.action_to_tuple(action)
+        prefix_map = {
+            "navigate": "NAVIGATE:",
+            "search": "SEARCH:",
+            "html": "HTML:",
+        }
+        prefix = prefix_map.get(action_type, "HTML:")
+        return f"{prefix}{payload}"
 
     def wrap_response_in_html(self, content, query):
         """Wrap AI text response in nice HTML"""
@@ -297,7 +202,7 @@ Current page context: """ + (current_url if current_url else "No current page")
             background: rgba(0,0,0,0.2); 
             padding: 15px; 
             border-radius: 8px; 
-            margin-bottom: 20px;
+            margin: 20px 0;
             font-style: italic;
         }}
         h1 {{ font-size: 2.5em; margin-bottom: 10px; }}
@@ -310,7 +215,7 @@ Current page context: """ + (current_url if current_url else "No current page")
             <h1>🤖 AI Assistant</h1>
         </div>
         <div class="content">
-            <div class="query">"{query}"</div>
+            <div class="query">{query}</div>
             <p>{content}</p>
         </div>
     </div>
@@ -560,27 +465,33 @@ Current page context: """ + (current_url if current_url else "No current page")
 
 
 class VimBrowser(QMainWindow):
-    def __init__(self):
+    def __init__(self, conversation_log: ConversationLog, headless: bool = False):
         super().__init__()
-
-        # Vim modes
         self.mode = "NORMAL"
         self.command_buffer = ""
-
-        # Buffer management
-        self.buffers = []
+        self.buffers: list[str] = []
         self.current_buffer = 0
-
-        # AI integration
         self.ai_worker = None
         self.last_query = None
-        # Conversation logging
-        conv_path = os.path.join(
-            os.path.expanduser("~"), ".config", "minimal-browser", "conversations.json"
-        )
-        self.conversation_log = ConversationLog(conv_path)
+        self.conversation_log = conversation_log
+        self.conv_memory: ConversationMemory = ConversationMemory()
+        self.engine = QtWebEngine() if not headless else None
+        self.initial_load = True
+        self._init_ai_overlay()
+        self._init_profile_and_browser()
+        self._init_navigation_toolbar()
+        self._init_tab_bar()
+        self._init_progress_bar()
+        self._init_command_line()
+        self._init_mode_timer()
+        self._connect_browser_signals()
+        initial_url = sys.argv[1] if len(sys.argv) > 1 else "https://www.google.com"
+        self.open_url(initial_url)
+        self.setup_keybindings()
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.update_title()
 
-        # Loading overlay for AI responses
+    def _init_ai_overlay(self):
         self.loading_overlay = QLabel(self)
         self.loading_overlay.setStyleSheet("""
             QLabel {
@@ -608,9 +519,7 @@ class VimBrowser(QMainWindow):
         self.loading_overlay.hide()
         self.loading_overlay.raise_()
 
-        self.initial_load = True
-
-        # Create persistent profile for cookies
+    def _init_profile_and_browser(self):
         self.profile = QWebEngineProfile()
         self.profile.setPersistentCookiesPolicy(
             QWebEngineProfile.ForcePersistentCookies
@@ -618,95 +527,80 @@ class VimBrowser(QMainWindow):
         self.profile.setPersistentStoragePath(
             os.path.join(os.path.expanduser("~"), ".minimal-browser")
         )
-
-        # Create web view with optimized settings
-        print("Initializing QWebEngineView...")
         try:
             self.browser = QWebEngineView()
-            print("QWebEngineView created successfully")
-
-            # Create page with persistent profile
             self.page = QWebEnginePage(self.profile, self)
             self.browser.setPage(self.page)
-
-            # Optimize web engine settings for speed
             settings = self.browser.settings()
-            settings.setAttribute(QWebEngineSettings.WebAttribute.PluginsEnabled, False)
             settings.setAttribute(
                 QWebEngineSettings.WebAttribute.JavascriptEnabled, True
             )
-            settings.setAttribute(
-                QWebEngineSettings.WebAttribute.LocalStorageEnabled, True
-            )
-            settings.setAttribute(
-                QWebEngineSettings.WebAttribute.LocalContentCanAccessRemoteUrls, True
-            )
-            settings.setAttribute(
-                QWebEngineSettings.WebAttribute.XSSAuditingEnabled, False
-            )
-            settings.setAttribute(
-                QWebEngineSettings.WebAttribute.SpatialNavigationEnabled, False
-            )
-            settings.setAttribute(
-                QWebEngineSettings.WebAttribute.HyperlinkAuditingEnabled, False
-            )
-            print("WebEngine settings configured")
-
-            # Use custom profile for caching
-            self.profile.setHttpCacheType(QWebEngineProfile.HttpCacheType.DiskHttpCache)
-            self.profile.setHttpCacheMaximumSize(50 * 1024 * 1024)  # 50MB cache
-            print("Persistent profile configured")
-
         except Exception as e:
             print(f"WebEngine initialization error: {e}")
-            # Fallback: create a basic web view without advanced settings
             self.browser = QWebEngineView()
-
         self.setCentralWidget(self.browser)
-        # Hide all UI elements
         self.setMenuBar(None)
         self.statusBar().hide()
 
-        # Minimal command line (overlay style, hidden by default)
+    def _init_navigation_toolbar(self):
+        toolbar_widget = QWidget(self)
+        layout = QHBoxLayout()
+        layout.setContentsMargins(5, 5, 5, 5)
+        self.back_button = QPushButton("←")
+        self.forward_button = QPushButton("→")
+        self.reload_button = QPushButton("⟳")
+        self.newtab_button = QPushButton("+")
+        layout.addWidget(self.back_button)
+        layout.addWidget(self.forward_button)
+        layout.addWidget(self.reload_button)
+        layout.addWidget(self.newtab_button)
+        toolbar_widget.setLayout(layout)
+
+        self.navbar_container = QWidget(self)
+        vlayout = QVBoxLayout(self.navbar_container)
+        vlayout.setContentsMargins(0, 0, 0, 0)
+        vlayout.addWidget(toolbar_widget)
+        self.setMenuWidget(self.navbar_container)
+
+        # Connect
+        self.back_button.clicked.connect(self.go_back)
+        self.forward_button.clicked.connect(self.go_forward)
+        self.reload_button.clicked.connect(self.reload_page)
+        self.newtab_button.clicked.connect(self.new_buffer)
+
+    def _init_tab_bar(self):
+        self.tab_bar = QTabBar()
+        self.tab_bar.setMovable(True)
+        self.navbar_container.layout().addWidget(self.tab_bar)
+        self.tab_bar.currentChanged.connect(self._on_tab_changed)
+
+    def _init_progress_bar(self):
+        self.progress_bar = QProgressBar()
+        self.progress_bar.hide()
+        self.navbar_container.layout().addWidget(self.progress_bar)
+
+    def _init_command_line(self):
         self.command_line = QLineEdit(self)
-        self.command_line.setStyleSheet("""
-            QLineEdit {
-                background-color: rgba(30, 30, 30, 240);
-                color: #ffffff;
-                border: 1px solid #555;
-                padding: 4px 8px;
-                font-family: monospace;
-                font-size: 12px;
-            }
-        """)
+        self.command_line.setStyleSheet(
+            "QLineEdit { background-color: rgba(30,30,30,240); color: #fff; }"
+        )
         self.command_line.hide()
         self.command_line.returnPressed.connect(self.execute_command)
 
-        # Timer for hiding mode indicator
+    def _init_mode_timer(self):
         self.mode_timer = QTimer()
         self.mode_timer.timeout.connect(self.hide_mode_indicator)
         self.mode_timer.setSingleShot(True)
 
-        # Connect load signals for debugging
+    def _connect_browser_signals(self):
+        self.browser.loadStarted.connect(lambda: self.progress_bar.show())
+        self.browser.loadProgress.connect(lambda p: self.progress_bar.setValue(p))
+        self.browser.loadFinished.connect(lambda ok: self.progress_bar.hide())
         self.browser.loadStarted.connect(lambda: print("Page load started"))
         self.browser.loadProgress.connect(lambda p: print(f"Load progress: {p}%"))
         self.browser.loadFinished.connect(
             lambda ok: print(f"Page load finished: {'SUCCESS' if ok else 'FAILED'}")
         )
-
-        # Load initial URL
-        initial_url = sys.argv[1] if len(sys.argv) > 1 else "https://www.google.com"
-        print(f"Loading initial URL: {initial_url}")
-        self.open_url(initial_url)
-
-        # Set up vim-like keybindings
-        self.setup_keybindings()
-
-        # Focus management
-        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-
-        # Update window title to show mode subtly
-        self.update_title()
 
     def setup_keybindings(self):
         # Escape key - always goes to normal mode
@@ -731,6 +625,10 @@ class VimBrowser(QMainWindow):
         QShortcut(QKeySequence("t"), self, self.new_buffer)
         QShortcut(QKeySequence("x"), self, self.close_buffer)
         QShortcut(QKeySequence("q"), self, self.quit_if_normal)
+        QShortcut(QKeySequence("Ctrl+T"), self, self.new_buffer)
+        QShortcut(QKeySequence("Ctrl+W"), self, self.close_buffer)
+        QShortcut(QKeySequence("Ctrl+R"), self, self.reload_page)
+        QShortcut(QKeySequence("Ctrl+Tab"), self, self.next_buffer)
 
         # Scrolling
         QShortcut(QKeySequence("j"), self, lambda: self.scroll_page(50))
@@ -742,7 +640,6 @@ class VimBrowser(QMainWindow):
 
     def keyPressEvent(self, event):
         if self.mode == "NORMAL":
-            # In normal mode, handle single key commands
             key = event.text().lower()
             if key in [
                 ":",
@@ -774,12 +671,10 @@ class VimBrowser(QMainWindow):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        # Position command line at bottom center
         if hasattr(self, "command_line"):
             width = min(400, self.width() - 40)
             self.command_line.resize(width, 30)
             self.command_line.move((self.width() - width) // 2, self.height() - 50)
-        # Resize loading overlay
         if hasattr(self, "loading_overlay"):
             self.loading_overlay.resize(self.size())
 
@@ -817,12 +712,11 @@ class VimBrowser(QMainWindow):
     def ai_chat_mode(self):
         if self.mode == "NORMAL":
             self.mode = "AI_CHAT"
-            self.show_command_line("🤖 ")
+            self.show_command_line("研究员 ")
 
     def show_help(self):
         if self.mode == "NORMAL":
             help_content = self.get_help_content()
-            # Create a data URL with base64 encoding
             encoded_html = base64.b64encode(help_content.encode("utf-8")).decode(
                 "ascii"
             )
@@ -849,7 +743,7 @@ class VimBrowser(QMainWindow):
             self.smart_search(command[2:])
         elif command.startswith("a "):
             self.ai_search(command[2:])
-        elif command.startswith("🤖 "):
+        elif command.startswith("🤖"):
             query = command[2:]
             print(f"Executing AI chat with query: '{query}'")
             self.ai_chat(query)
@@ -862,18 +756,15 @@ class VimBrowser(QMainWindow):
         if cmd in ["q", "quit"]:
             self.close()
         elif cmd in ["w", "write"]:
-            # Could implement bookmarking here
             pass
         elif cmd in ["wq"]:
             self.close()
         elif cmd in ["help", "h"]:
             self.show_help()
         elif cmd.startswith("e "):
-            # Edit/open URL
             url = cmd[2:]
             self.open_url(url)
         elif cmd.startswith("b"):
-            # Buffer commands
             if cmd == "b":
                 self.show_buffers()
             elif cmd.startswith("bd"):
@@ -883,7 +774,6 @@ class VimBrowser(QMainWindow):
             elif cmd.startswith("bp"):
                 self.prev_buffer()
         elif cmd.isdigit():
-            # Go to buffer number
             buf_num = int(cmd) - 1
             if 0 <= buf_num < len(self.buffers):
                 self.current_buffer = buf_num
@@ -910,8 +800,10 @@ class VimBrowser(QMainWindow):
         if url not in self.buffers:
             self.buffers.append(url)
             self.current_buffer = len(self.buffers) - 1
+            self.tab_bar.addTab(url.split("/")[2] if "//" in url else url)
         else:
             self.current_buffer = self.buffers.index(url)
+        self.tab_bar.setCurrentIndex(self.current_buffer)
 
         if self.initial_load:
             self.browser.load(qurl)
@@ -943,6 +835,7 @@ class VimBrowser(QMainWindow):
             if self.current_buffer >= len(self.buffers):
                 self.current_buffer = len(self.buffers) - 1
             self.browser.load(QUrl(self.buffers[self.current_buffer]))
+            self.tab_bar.removeTab(self.current_buffer)
         else:
             self.close()
         self.update_title()
@@ -950,20 +843,19 @@ class VimBrowser(QMainWindow):
     def next_buffer(self):
         if self.mode == "NORMAL" and len(self.buffers) > 1:
             self.current_buffer = (self.current_buffer + 1) % len(self.buffers)
-            self.setWindowTitle("Switching buffer...")
+            self.setWindowTitle("Switching...")
             self.browser.load(QUrl(self.buffers[self.current_buffer]))
             self.update_title()
 
     def prev_buffer(self):
         if self.mode == "NORMAL" and len(self.buffers) > 1:
             self.current_buffer = (self.current_buffer - 1) % len(self.buffers)
-            self.setWindowTitle("Switching buffer...")
+            self.setWindowTitle("Switching...")
             self.browser.load(QUrl(self.buffers[self.current_buffer]))
             self.update_title()
 
     def scroll_page(self, pixels):
         if self.mode == "NORMAL":
-            # Smoother scrolling with easing
             direction = 1 if pixels > 0 else -1
             distance = abs(pixels)
             js = f"""
@@ -1000,15 +892,13 @@ class VimBrowser(QMainWindow):
             self.close()
 
     def show_buffers(self):
-        # Show buffer info briefly in title
         if self.buffers:
             buf_info = f"Buffers: {', '.join(f'{i + 1}:{url.split("/")[-1][:20]}' for i, url in enumerate(self.buffers))}"
             self.setWindowTitle(buf_info)
-            self.mode_timer.start(3000)  # Hide after 3 seconds
+            self.mode_timer.start(3000)
 
     def update_title(self):
         if self.mode == "NORMAL":
-            # Show buffer info subtly
             if self.buffers and self.current_buffer < len(self.buffers):
                 current_url = self.buffers[self.current_buffer]
                 if current_url.startswith("data:"):
@@ -1027,285 +917,51 @@ class VimBrowser(QMainWindow):
             else:
                 title = "Vim Browser"
         elif self.mode == "AI_CHAT":
-            title = "-- AI CHAT --"
+            title = "-- 工程师 CHAT --"
         else:
             title = f"-- {self.mode} --"
-
         self.setWindowTitle(title)
 
     def hide_mode_indicator(self):
         if self.mode == "NORMAL":
             self.update_title()
 
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        # Position command line at bottom center
-        if hasattr(self, "command_line"):
-            width = min(400, self.width() - 40)
-            self.command_line.resize(width, 30)
-            self.command_line.move((self.width() - width) // 2, self.height() - 50)
-
-    def smart_search(self, query):
-        """Smart search - detects if it's a URL or search query"""
-        query = query.strip()
-        if not query:
-            return
-
-        # Check if it looks like a URL
-        if ("." in query and " " not in query) or query.startswith(
-            ("http://", "https://")
-        ):
-            self.open_url(query)
-        else:
-            # Use Google search
-            search_url = f"https://www.google.com/search?q={query.replace(' ', '+')}"
-            self.open_url(search_url)
-
-    def ai_search(self, query):
-        """AI/LLM search - opens query in ChatGPT or similar"""
-        query = query.strip()
-        if not query:
-            return
-
-        # Use ChatGPT (you can change this to your preferred AI service)
-        ai_url = f"https://chat.openai.com/?q={query.replace(' ', '%20')}"
-        self.open_url(ai_url)
-
-    def ai_chat(self, query):
-        """Native AI chat - processes query with AI"""
-        query = query.strip()
-        if not query:
-            return
-
-        self.last_query = query
-        print(f"AI Chat Query: {query}")  # Debug logging
-        # Log query start
-        self.conversation_log.append(query, None)
-
-        # Show loading overlay
-        self.loading_overlay.resize(self.size())
-        self.loading_overlay.show()
-        self.loading_overlay.raise_()
-
-        # Show loading state in title
-        self.setWindowTitle("🤖 AI Thinking...")
-
-        # Get current page URL for context
-        current_url = self.buffers[self.current_buffer] if self.buffers else ""
-
-        # Start AI worker thread
-        self.ai_worker = AIWorker(query, current_url)
-        self.ai_worker.response_ready.connect(self.handle_ai_response)
-        self.ai_worker.progress_update.connect(self.update_progress)
-        self.ai_worker.start()
-
-    def handle_ai_response(self, response_type, content):
-        """Handle AI response"""
-        print(f"AI Response: {response_type} - {content[:100]}...")  # Debug logging
-
-        # Hide loading overlay
-        self.loading_overlay.hide()
-
-        if response_type == "error":
-            self.setWindowTitle(f"AI Error: {content}")
-            self.mode_timer.start(3000)
-            return
-
-        # Parse AI response
-        if content.startswith("NAVIGATE:"):
-            url = content[9:]  # Remove "NAVIGATE:" prefix
-            print(f"Navigating to: {url}")
-            self.open_url(url)
-        elif content.startswith("SEARCH:"):
-            query = content[7:]  # Remove "SEARCH:" prefix
-            print(f"Searching for: {query}")
-            search_url = f"https://www.google.com/search?q={query.replace(' ', '+')}"
-            self.open_url(search_url)
-        elif content.startswith("HTML:"):
-            html_content = content[5:]  # Remove "HTML:" prefix
-            print(f"Creating HTML content: {len(html_content)} chars")
-            # Create data URL with the HTML content - use base64 encoding for better compatibility
-            import base64
-
-            encoded_html = base64.b64encode(html_content.encode("utf-8")).decode(
-                "ascii"
-            )
-            data_url = f"data:text/html;base64,{encoded_html}"
-            print(f"Data URL length: {len(data_url)}")
-            self.open_url(data_url)
-        else:
-            # Default: treat as HTML content
-            print(f"Creating default HTML: {len(content)} chars")
-            import base64
-
-            encoded_html = base64.b64encode(content.encode("utf-8")).decode("ascii")
-            data_url = f"data:text/html;base64,{encoded_html}"
-            self.open_url(data_url)
-
-        # Log final response
-        try:
-            if self.last_query:
-                self.conversation_log.update_last_response(content)
-        except Exception as e:
-            print(f"Conversation log error: {e}")
-        self.update_title()
-
-    def update_progress(self, message):
-        """Update progress in window title"""
-        self.setWindowTitle(f"🤖 {message}")
-        print(f"Progress: {message}")  # Debug logging
-
-    def toggle_dev_tools(self):
-        """Toggle developer tools (F10)"""
-        if self.mode == "NORMAL":
-            # Get the web page and show dev tools
-            page = self.browser.page()
-            if hasattr(page, "setDevToolsPage"):
-                # Create dev tools window if it doesn't exist
-                if not hasattr(self, "dev_tools"):
-                    from PySide6.QtWebEngineWidgets import QWebEngineView
-
-                    self.dev_tools = QWebEngineView()
-                    self.dev_tools.setWindowTitle("Developer Tools")
-                    self.dev_tools.resize(800, 600)
-                    page.setDevToolsPage(self.dev_tools.page())
-
-                # Toggle visibility
-                if self.dev_tools.isVisible():
-                    self.dev_tools.hide()
-                else:
-                    self.dev_tools.show()
-            else:
-                print("Developer tools not available in this Qt version")
-
-    def view_source(self):
-        """View page source (Ctrl+U)"""
-        if self.mode == "NORMAL":
-            # Get the HTML source of current page
-            self.browser.page().toHtml(self.show_source_in_new_buffer)
-
-    def show_buffer_overlay(self):
-        """Show overlay during buffer switch"""
-        self.buffer_overlay.resize(self.size())
-        self.buffer_overlay.show()
-        self.buffer_overlay.raise_()
-
-    def hide_buffer_overlay(self):
-        """Hide buffer overlay after load"""
-        self.buffer_overlay.hide()
-
-    def on_load_finished(self, ok):
-        print(f"Page load finished: {'SUCCESS' if ok else 'FAILED'}")
-        if self.initial_load and ok:
-            self.initial_load = False
-        else:
-            self.setWindowTitle(self.update_title())
-
-    def show_source_in_new_buffer(self, html):
-        """Show HTML source in a new buffer"""
-        # Create a simple HTML viewer for the source
-        source_html = f"""<!DOCTYPE html>
-<html>
-<head>
-    <title>Page Source</title>
-    <style>
-        body {{
-            font-family: 'Courier New', monospace;
-            background: #1e1e1e;
-            color: #d4d4d4;
-            margin: 0;
-            padding: 20px;
-            line-height: 1.4;
-        }}
-        .header {{
-            background: #2d2d30;
-            color: #cccccc;
-            padding: 15px;
-            margin: -20px -20px 20px -20px;
-            border-bottom: 1px solid #3e3e42;
-        }}
-        pre {{
-            background: #252526;
-            padding: 20px;
-            border-radius: 5px;
-            overflow: auto;
-            white-space: pre-wrap;
-            word-wrap: break-word;
-        }}
-        .tag {{ color: #569cd6; }}
-        .attr {{ color: #9cdcfe; }}
-        .string {{ color: #ce9178; }}
-        .comment {{ color: #6a9955; font-style: italic; }}
-    </style>
-</head>
-<body>
-    <div class="header">
-        <h2>📄 Page Source</h2>
-        <p>Current page HTML source ({len(html)} characters)</p>
-    </div>
-    <pre>{html.replace("<", "<").replace(">", ">")}</pre>
-</body>
-</html>"""
-
-        # Create data URL and open in new buffer
-        encoded_html = base64.b64encode(source_html.encode("utf-8")).decode("ascii")
-        data_url = f"data:text/html;base64,{encoded_html}"
-        self.setWindowTitle("Loading source...")
-        self.browser.load(QUrl(data_url))
-        print(f"Source view created: {len(html)} characters")
-
-    def show_debug_info(self):
-        """Show debug information (Ctrl+I)"""
-        if self.mode == "NORMAL":
-            current_url = self.browser.url().toString()
-            print(f"\n=== DEBUG INFO ===")
-            print(f"Current URL: {current_url}")
-            print(f"Buffer count: {len(self.buffers)}")
-            print(f"Current buffer: {self.current_buffer}")
-            print(f"Mode: {self.mode}")
-            if self.buffers:
-                print(f"All buffers:")
-                for i, buf in enumerate(self.buffers):
-                    marker = " -> " if i == self.current_buffer else "    "
-                    print(f"{marker}{i + 1}: {buf[:80]}...")
-            print("==================\n")
-
-            # Also show in title briefly
-            self.setWindowTitle(
-                f"Debug: {len(self.buffers)} buffers, URL: {current_url[:50]}..."
-            )
-            self.mode_timer.start(3000)
-
-    def handle_streaming_chunk(self, chunk):
-        """Handle streaming response chunks"""
-        # For future streaming implementation
-        pass
-
     def get_help_content(self):
-        """Generate help content as HTML"""
         return """<!DOCTYPE html>
 <html>
 <head>
     <title>Vim Browser Help</title>
     <style>
-        body { 
-            font-family: monospace; 
-            background: #1e1e1e; 
-            color: #ffffff; 
-            padding: 20px; 
+        body {
+            font-family: monospace;
+            background: rgba(30,30,30,1);
+            color: #ffffff;
+            padding: 20px;
             line-height: 1.6;
         }
-        h1, h2 { color: #4a9eff; }
-        .key { 
-            background: #333; 
-            padding: 2px 6px; 
-            border-radius: 3px; 
+        h1, h2 {
+            color: #4a9eff;
+        }
+        .key {
+            background: #333;
+            padding: 2px 6px;
+            border-radius: 3px;
             font-weight: bold;
         }
-        .section { margin-bottom: 30px; }
-        table { border-collapse: collapse; width: 100%; }
-        td { padding: 8px; border-bottom: 1px solid #333; }
-        .cmd { color: #90ee90; }
+        .section {
+            margin-bottom: 30px;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+        }
+        td {
+            padding: 8px;
+            border-bottom: 1px solid #333;
+        }
+        .cmd {
+            color: #90ee90;
+        }
     </style>
 </head>
 <body>
@@ -1314,74 +970,167 @@ class VimBrowser(QMainWindow):
     <div class="section">
         <h2>Navigation</h2>
         <table>
-            <tr><td><span class="key">j/k</span></td><td>Scroll down/up</td></tr>
-            <tr><td><span class="key">d/u</span></td><td>Page down/up</td></tr>
-            <tr><td><span class="key">g/G</span></td><td>Top/bottom of page</td></tr>
-            <tr><td><span class="key">H/L</span></td><td>Back/forward</td></tr>
-            <tr><td><span class="key">r</span></td><td>Reload page</td></tr>
+            <tr>
+                <td><span class="key">j/k</span></td>
+                <td>Scroll down/up</td>
+            </tr>
+            <tr>
+                <td><span class="key">d/u</span></td>
+                <td>Page down/up</td>
+            </tr>
+            <tr>
+                <td><span class="key">g/G</span></td>
+                <td>Top/bottom of page</td>
+            </tr>
+            <tr>
+                <td><span class="key">H/L</span></td>
+                <td>Back/forward</td>
+            </tr>
+            <tr>
+                <td><span class="key">r</span></td>
+                <td>Reload page</td>
+            </tr>
         </table>
     </div>
     
     <div class="section">
         <h2>Buffers (Tabs)</h2>
         <table>
-            <tr><td><span class="key">n/p</span></td><td>Next/previous buffer</td></tr>
-            <tr><td><span class="key">t</span></td><td>New buffer</td></tr>
-            <tr><td><span class="key">x</span></td><td>Close buffer</td></tr>
-            <tr><td><span class="key">:b</span></td><td>Show buffers</td></tr>
-            <tr><td><span class="key">:1,2,3...</span></td><td>Go to buffer number</td></tr>
+            <tr>
+                <td><span class="key">n/p</span></td>
+                <td>Next/previous buffer</td>
+            </tr>
+            <tr>
+                <td><span class="key">t</span></td>
+                <td>New buffer</td>
+            </tr>
+            <tr>
+                <td><span class="key">x</span></td>
+                <td>Close buffer</td>
+            </tr>
+            <tr>
+                <td><span class="key">:b</span></td>
+                <td>Show buffers</td>
+            </tr>
+            <tr>
+                <td><span class="key">:1,2,3...</span></td>
+                <td>Go to buffer number</td>
+            </tr>
         </table>
     </div>
     
     <div class="section">
         <h2>Opening URLs & Search</h2>
         <table>
-            <tr><td><span class="key">o</span></td><td>Open URL</td></tr>
-            <tr><td><span class="key">s</span></td><td>Smart search (Google or URL)</td></tr>
-            <tr><td><span class="key">a</span></td><td>AI search (ChatGPT)</td></tr>
-            <tr><td><span class="key">Space</span></td><td>Native AI chat</td></tr>
-            <tr><td><span class="key">/</span></td><td>Search in page</td></tr>
+            <tr>
+                <td><span class="key">o</span></td>
+                <td>Open URL</td>
+            </tr>
+            <tr>
+                <td><span class="key">s</span></td>
+                <td>Smart search (Google or URL)</td>
+            </tr>
+            <tr>
+                <td><span class="key">a</span></td>
+                <td>AI search (ChatGPT)</td>
+            </tr>
+            <tr>
+                <td><span class="key">Space</span></td>
+                <td>Native AI chat</td>
+            </tr>
+            <tr>
+                <td><span class="key">/</span></td>
+                <td>Search in page</td>
+            </tr>
         </table>
     </div>
     
     <div class="section">
         <h2>Developer Tools</h2>
         <table>
-            <tr><td><span class="key">F12</span></td><td>Toggle developer tools</td></tr>
-            <tr><td><span class="key">Ctrl+U</span></td><td>View page source</td></tr>
-            <tr><td><span class="key">Ctrl+I</span></td><td>Show debug info</td></tr>
+            <tr>
+                <td><span class="key">F12</span></td>
+                <td>Toggle developer tools</td>
+            </tr>
+            <tr>
+                <td><span class="key">Ctrl+U</span></td>
+                <td>View page source</td>
+            </tr>
+            <tr>
+                <td><span class="key">Ctrl+I</span></td>
+                <td>Show debug info</td>
+            </tr>
         </table>
     </div>
     
     <div class="section">
         <h2>AI Integration</h2>
         <table>
-            <tr><td><span class="key">Space</span></td><td>Ask AI anything - it can navigate or create content</td></tr>
-            <tr><td colspan="2">Examples:</td></tr>
-            <tr><td></td><td>"navigate to github" &rarr; Opens GitHub</td></tr>
-            <tr><td></td><td>"create a todo list" &rarr; Generates interactive todo app</td></tr>
-            <tr><td></td><td>"make a calculator" &rarr; Creates working calculator</td></tr>
-            <tr><td></td><td>"explain quantum physics" &rarr; Generates explanation page</td></tr>
+            <tr>
+                <td><span class="key">Space</span></td>
+                <td>Ask AI anything - it can navigate or create content</td>
+            </tr>
+            <tr colspan="2"><td></td><td>Examples:</td></tr>
+            <tr>
+                <td></td>
+                <td>"navigate to github" &rarr; Opens GitHub</td>
+            </tr>
+            <tr>
+                <td></td>
+                <td>"create a todo list" &rarr; Generates interactive todo app</td>
+            </tr>
+            <tr>
+                <td></td>
+                <td>"make a calculator" &rarr; Creates working calculator</td>
+            </tr>
+            <tr>
+                <td></td>
+                <td>"explain quantum physics" &rarr; Generates explanation page</td>
+            </tr>
         </table>
     </div>
     
     <div class="section">
         <h2>Commands (:)</h2>
         <table>
-            <tr><td><span class="cmd">:q</span></td><td>Quit</td></tr>
-            <tr><td><span class="cmd">:help</span></td><td>Show this help</td></tr>
-            <tr><td><span class="cmd">:e &lt;url&gt;</span></td><td>Open URL</td></tr>
-            <tr><td><span class="cmd">:bd</span></td><td>Close buffer</td></tr>
-            <tr><td><span class="cmd">:bn/:bp</span></td><td>Next/previous buffer</td></tr>
+            <tr>
+                <td><span class="cmd">:q</span></td>
+                <td>Quit</td>
+            </tr>
+            <tr>
+                <td><span class="cmd">:help</span></td>
+                <td>Show this help</td>
+            </tr>
+            <tr>
+                <td><span class="cmd">:e &lt;url&gt;</span></td>
+                <td>Open URL</td>
+            </tr>
+            <tr>
+                <td><span class="cmd">:bd</span></td>
+                <td>Close buffer</td>
+            </tr>
+            <tr>
+                <td><span class="cmd">:bn/:bp</span></td>
+                <td>Next/previous buffer</td>
+            </tr>
         </table>
     </div>
     
     <div class="section">
         <h2>Modes</h2>
         <table>
-            <tr><td><span class="key">NORMAL</span></td><td>Default mode for navigation</td></tr>
-            <tr><td><span class="key">COMMAND</span></td><td>Typing commands or URLs</td></tr>
-            <tr><td><span class="key">Escape</span></td><td>Return to NORMAL mode</td></tr>
+            <tr>
+                <td><span class="key">NORMAL</span></td>
+                <td>Default mode for navigation</td>
+            </tr>
+            <tr>
+                <td><span class="key">COMMAND</span></td>
+                <td>Typing commands or URLs</td>
+            </tr>
+            <tr>
+                <td><span class="key">Escape</span></td>
+                <td>Return to NORMAL mode</td>
+            </tr>
         </table>
     </div>
     
@@ -1395,51 +1144,12 @@ class VimBrowser(QMainWindow):
         <p><span class="key">o reddit.com</span> &rarr; Open Reddit</p>
     </div>
     
-    <p style="margin-top: 40px; color: #666;">Press <span class="key">Escape</span> to return to normal browsing</p>
+    <p style="margin-top: 40px; color: #666;"><span class="key">Press Escape</span> to return to normal browsing</p>
 </body>
 </html>"""
 
-
-def main():
-    # Python 3.13 + Qt compatibility fixes
-    if hasattr(Qt, "AA_ShareOpenGLContexts"):
-        QApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts)
-
-    # Wayland-specific Qt fixes
-    QApplication.setAttribute(Qt.ApplicationAttribute.AA_UseHighDpiPixmaps)
-    if hasattr(Qt.ApplicationAttribute, "AA_EnableHighDpiScaling"):
-        QApplication.setAttribute(Qt.ApplicationAttribute.AA_EnableHighDpiScaling)
-
-    # Set up application with optimizations
-    app = QApplication(sys.argv)
-    from PySide6.QtWebEngineCore import QWebEngineProfile
-
-    QWebEngineProfile.defaultProfile().setPersistentCookiesPolicy(
-        QWebEngineProfile.ForcePersistentCookies
-    )
-    app.setApplicationName("Minimal Browser")
-    app.setApplicationVersion("0.2.0")
-
-    from PySide6.QtWebEngineCore import QWebEngineProfile
-
-    QWebEngineProfile.defaultProfile().setPersistentCookiesPolicy(
-        QWebEngineProfile.ForcePersistentCookies
-    )
-    QWebEngineProfile.defaultProfile().setPersistentStoragePath(
-        os.path.join(os.path.expanduser("~"), ".config", "minimal-browser")
-    )
-
-    # Additional Qt WebEngine fixes for Python 3.13 + Wayland
-    try:
-        from PySide6.QtWebEngineCore import QWebEngineSettings
-
-        # Skip global settings - they're not needed and the method name varies
-        print("Skipping global WebEngine settings (not critical)")
-    except Exception as e:
-        print(f"WebEngine settings warning: {e}")
-
-    # Create and show browser
-    browser = VimBrowser()
-    browser.show()
-
-    sys.exit(app.exec())
+    def _on_tab_changed(self, index):
+        if 0 <= index < len(self.buffers):
+            self.current_buffer = index
+            self.browser.load(QUrl(self.buffers[self.current_buffer]))
+            self.update_title()
