@@ -6,9 +6,7 @@ import os
 import time
 import base64
 import requests  # type: ignore[import-untyped]
-from typing import Any
-import os
-from typing import cast, MutableMapping, Any
+from typing import Any, MutableMapping, Optional, cast
 
 # Fix for Python 3.13 compatibility and Wayland envs
 environ: MutableMapping[str, str] = cast(MutableMapping[str, str], os.environ)
@@ -43,8 +41,8 @@ from PySide6.QtWebEngineCore import (
 )
 
 from .engines.qt_engine import QtWebEngine
-from .ai.schemas import ConversationMemory  # type: ignore[attr-defined]
-from .ai.tools import ResponseProcessor
+from .ai.schemas import AIAction, ConversationMemory
+from .ai.tools import ResponseProcessor, URLBuilder
 from .storage.conversations import ConversationLog
 
 
@@ -61,10 +59,16 @@ class AIWorker(QThread):
     progress_update = pyqtSignal(str)  # progress message
     streaming_chunk = pyqtSignal(str)  # streaming response chunk
 
-    def __init__(self, query, current_url=""):
+    def __init__(
+        self,
+        query: str,
+        current_url: str = "",
+        history: Optional[list[dict[str, str]]] = None,
+    ):
         super().__init__()
         self.query = query
         self.current_url = current_url
+        self.history = list(history or [])
 
     def run(self):
         try:
@@ -103,12 +107,15 @@ Examples:
 Current page context: """ + (current_url if current_url else "No current page")
 
         # Prepare the API request
+        messages: list[dict[str, str]] = [
+            {"role": "system", "content": system_prompt},
+            *self.history,
+            {"role": "user", "content": query},
+        ]
+
         data = {
             "model": "openai/gpt-5-chat",
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": query},
-            ],
+            "messages": messages,
             "stream": True,
         }
 
@@ -471,8 +478,10 @@ class VimBrowser(QMainWindow):
         self.command_buffer = ""
         self.buffers: list[str] = []
         self.current_buffer = 0
-        self.ai_worker = None
-        self.last_query = None
+        self.ai_worker: Optional[AIWorker] = None
+        self.last_query: Optional[str] = None
+        self.current_ai_mode: str = "chat"
+        self.ai_stream_buffer: str = ""
         self.conversation_log = conversation_log
         self.conv_memory: ConversationMemory = ConversationMemory()
         self.engine = QtWebEngine() if not headless else None
@@ -602,6 +611,97 @@ class VimBrowser(QMainWindow):
             lambda ok: print(f"Page load finished: {'SUCCESS' if ok else 'FAILED'}")
         )
 
+    def _current_url(self) -> str:
+        if hasattr(self, "browser") and self.browser:
+            return self.browser.url().toString()
+        return ""
+
+    def _start_ai_request(self, query: str, mode: str) -> None:
+        query = query.strip()
+        if not query:
+            self._show_notification("AI request requires content", timeout=2500)
+            return
+
+        if self.ai_worker and self.ai_worker.isRunning():
+            self._show_notification("AI is already processing a request", timeout=2500)
+            return
+
+        current_url = self._current_url()
+        history = self.conv_memory.as_history()
+        worker = AIWorker(query, current_url=current_url, history=history)
+        worker.response_ready.connect(self._on_ai_response_ready)
+        worker.progress_update.connect(self._on_ai_progress_update)
+        worker.streaming_chunk.connect(self._on_ai_stream_chunk)
+
+        self.ai_worker = worker
+        self.last_query = query
+        self.current_ai_mode = mode
+        self.ai_stream_buffer = ""
+
+        self.conv_memory.add_user(query)
+        self.loading_overlay.setText("🤖 Analyzing request...")
+        self.loading_overlay.show()
+        self.loading_overlay.raise_()
+
+        worker.start()
+
+    def _on_ai_progress_update(self, message: str) -> None:
+        if not message:
+            return
+        self.loading_overlay.setText(f"🤖 {message}")
+
+    def _on_ai_stream_chunk(self, chunk: str) -> None:
+        if not chunk:
+            return
+        self.ai_stream_buffer += chunk
+        preview = self.ai_stream_buffer.strip()
+        if preview:
+            self.loading_overlay.setText(preview[-160:])
+
+    def _on_ai_response_ready(self, status: str, payload: str) -> None:
+        self.loading_overlay.hide()
+        self.loading_overlay.clear()
+
+        if self.ai_worker:
+            self.ai_worker.deleteLater()
+        self.ai_worker = None
+        self.ai_stream_buffer = ""
+
+        if status != "success":
+            self._handle_ai_error(payload)
+            return
+
+        self.conv_memory.add_assistant(payload)
+        if self.conversation_log and self.last_query is not None:
+            self.conversation_log.append(self.last_query, payload)
+
+        try:
+            action = ResponseProcessor.parse_response(payload)
+        except Exception as exc:  # pragma: no cover - defensive fallback
+            print(f"AI response parsing failed: {exc}")
+            action = ResponseProcessor.parse_response(f"HTML:{payload}")
+
+        self._apply_ai_action(action)
+        self._show_notification(f"AI {action.type} ready", timeout=3000)
+        self.normal_mode()
+
+    def _apply_ai_action(self, action: AIAction) -> None:
+        destination = URLBuilder.resolve_action(action)
+        self.open_url(destination)
+
+    def _handle_ai_error(self, message: str) -> None:
+        print(f"AI error: {message}")
+        self._show_notification(f"AI error: {message}", timeout=4000)
+        self.normal_mode()
+
+    def _show_notification(self, message: str, timeout: int = 3000) -> None:
+        if not message:
+            return
+        status_bar = self.statusBar()
+        status_bar.show()
+        status_bar.showMessage(message, timeout)
+        QTimer.singleShot(timeout, status_bar.hide)
+
     def setup_keybindings(self):
         # Escape key - always goes to normal mode
         QShortcut(QKeySequence("Escape"), self, self.normal_mode)
@@ -704,10 +804,16 @@ class VimBrowser(QMainWindow):
             self.mode = "COMMAND"
             self.show_command_line("s ")
 
+    def ai_search(self, query: str) -> None:
+        self._start_ai_request(query, mode="search")
+
     def ai_search_mode(self):
         if self.mode == "NORMAL":
             self.mode = "COMMAND"
             self.show_command_line("a ")
+
+    def ai_chat(self, query: str) -> None:
+        self._start_ai_request(query, mode="chat")
 
     def ai_chat_mode(self):
         if self.mode == "NORMAL":
