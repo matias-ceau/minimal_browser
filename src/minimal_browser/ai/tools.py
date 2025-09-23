@@ -1,37 +1,43 @@
 """AI tools and response processing"""
 
 import re
-from typing import Tuple, Optional
+from typing import Tuple
 from urllib.parse import quote
 import base64
+
+from pydantic import ValidationError
+
+from .schemas import AIAction, HtmlAction, NavigateAction, SearchAction
 
 
 class ResponseProcessor:
     """Processes AI responses and determines actions"""
+
+    @staticmethod
+    def parse_response(response: str) -> AIAction:
+        """Parse AI response and return a validated action model."""
+        response = response.strip()
+        action_type, payload = ResponseProcessor._infer_action_components(response)
+        return ResponseProcessor._build_action(action_type, payload)
+
+    @staticmethod
+    def parse_response_to_tuple(response: str) -> Tuple[str, str]:
+        """Backward-compatible parser returning the legacy (type, payload) tuple."""
+        action = ResponseProcessor.parse_response(response)
+        return ResponseProcessor.action_to_tuple(action)
     
     @staticmethod
-    def parse_response(response: str) -> Tuple[str, str]:
-        """
-        Parse AI response and return (action_type, content)
-        
-        Returns:
-            - ("navigate", url) for navigation
-            - ("search", query) for search
-            - ("html", html_content) for HTML generation
-        """
-        response = response.strip()
-        
-        # Check for explicit action prefixes
+    def _infer_action_components(response: str) -> Tuple[str, str]:
+        """Determine action type and payload from raw response text."""
         if response.startswith("NAVIGATE:"):
             return "navigate", response[9:].strip()
-        elif response.startswith("SEARCH:"):
+        if response.startswith("SEARCH:"):
             return "search", response[7:].strip()
-        elif response.startswith("HTML:"):
+        if response.startswith("HTML:"):
             return "html", response[5:].strip()
-        
-        # Intelligent parsing based on content
+
         return ResponseProcessor._intelligent_parse(response)
-    
+
     @staticmethod
     def _intelligent_parse(response: str) -> Tuple[str, str]:
         """Intelligently parse response without explicit prefixes"""
@@ -66,12 +72,72 @@ class ResponseProcessor:
         
         if any(indicator in response_lower for indicator in html_indicators):
             return "html", ResponseProcessor._wrap_as_html(response)
-        
+
         # Default: treat as search for short responses, HTML for long ones
         if len(response.split()) <= 5:
             return "search", response
         else:
             return "html", ResponseProcessor._wrap_as_html(response)
+
+    @staticmethod
+    def _build_action(action_type: str, payload: str) -> AIAction:
+        """Convert action tuple into a validated `AIAction` instance."""
+        if action_type == "navigate":
+            normalized = ResponseProcessor._normalize_url(payload)
+            try:
+                return NavigateAction(url=normalized)
+            except ValidationError:
+                # Fallback to search if the URL cannot be validated
+                candidate_query = payload.strip() or normalized
+                try:
+                    return SearchAction(query=candidate_query)
+                except ValidationError:
+                    html = ResponseProcessor._wrap_as_html(payload)
+                    return HtmlAction(html=html)
+
+        if action_type == "search":
+            try:
+                return SearchAction(query=payload)
+            except ValidationError:
+                # Promote malformed queries to HTML informational pages
+                html = ResponseProcessor._wrap_as_html(payload)
+                return HtmlAction(html=html)
+
+        # Treat everything else as HTML content
+        html_payload = ResponseProcessor._ensure_html(payload)
+        return HtmlAction(html=html_payload)
+
+    @staticmethod
+    def action_to_tuple(action: AIAction) -> Tuple[str, str]:
+        """Convert an `AIAction` instance back into (type, payload) format."""
+        if isinstance(action, NavigateAction):
+            return action.type, action.url
+        if isinstance(action, SearchAction):
+            return action.type, action.query
+        if isinstance(action, HtmlAction):
+            return action.type, action.html
+        raise TypeError(f"Unsupported action type: {type(action)!r}")
+
+    @staticmethod
+    def _normalize_url(url: str) -> str:
+        """Ensure the provided URL includes a scheme for validation."""
+        cleaned = url.strip()
+        if not cleaned:
+            return ""
+
+        # Prepend https:// if the scheme is missing
+        if not re.match(r"^[a-z]+://", cleaned, re.IGNORECASE):
+            cleaned = f"https://{cleaned}"
+
+        return cleaned
+
+    @staticmethod
+    def _ensure_html(content: str) -> str:
+        """Return provided content as HTML, wrapping plain text when needed."""
+        snippet = content.strip().lower()
+        if "<html" in snippet or snippet.startswith("<!doctype"):
+            return content
+        return ResponseProcessor._wrap_as_html(content)
     
     @staticmethod
     def _wrap_as_html(content: str) -> str:
@@ -132,3 +198,14 @@ class URLBuilder:
             return f"https://duckduckgo.com/?q={quote(query)}"
         else:
             return f"https://www.google.com/search?q={quote(query)}"
+
+    @staticmethod
+    def resolve_action(action: AIAction, engine: str = "google") -> str:
+        """Convert an AI action into a navigable URL or data URL."""
+        if isinstance(action, NavigateAction):
+            return str(action.url)
+        if isinstance(action, SearchAction):
+            return URLBuilder.create_search_url(action.query, engine=engine)
+        if isinstance(action, HtmlAction):
+            return URLBuilder.create_data_url(action.html)
+        raise TypeError(f"Unsupported action type: {type(action)!r}")
