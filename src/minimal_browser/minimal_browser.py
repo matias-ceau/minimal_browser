@@ -43,6 +43,7 @@ from PySide6.QtWebEngineCore import (
     QWebEnginePage,
 )
 import os
+
 # Prefer package‑relative import to avoid "No module named src"
 from minimal_browser.storage.conversations import ConversationLog
 
