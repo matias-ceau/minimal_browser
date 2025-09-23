@@ -43,7 +43,8 @@ from PySide6.QtWebEngineCore import (
     QWebEnginePage,
 )
 import os
-from src.storage.conversations import ConversationLog
+# Prefer package‑relative import to avoid "No module named src"
+from minimal_browser.storage.conversations import ConversationLog
 
 
 class AIWorker(QThread):
