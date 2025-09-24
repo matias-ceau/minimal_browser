@@ -18,8 +18,6 @@ from PySide6.QtWidgets import (
     QWidget,
     QLabel,
     QLineEdit,
-    QTabBar,
-    QProgressBar,
 )
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWebEngineCore import (
@@ -36,8 +34,17 @@ from .storage.conversations import ConversationLog
 
 def to_data_url(html: str) -> str:
     """Encode HTML content into a data URL with base64 encoding"""
-    encoded_html = base64.b64encode(html.encode("utf-8")).decode("ascii")
-    return f"data:text/html;base64,{encoded_html}"
+    # Ensure HTML is properly encoded as UTF-8 bytes
+    try:
+        html_bytes = html.encode("utf-8")
+        encoded_html = base64.b64encode(html_bytes).decode("ascii")
+        return f"data:text/html;charset=utf-8;base64,{encoded_html}"
+    except (UnicodeEncodeError, UnicodeDecodeError) as e:
+        print(f"Encoding error in to_data_url: {e}")
+        # Fallback: use error handling
+        html_bytes = html.encode("utf-8", errors="replace")
+        encoded_html = base64.b64encode(html_bytes).decode("ascii")
+        return f"data:text/html;charset=utf-8;base64,{encoded_html}"
 
 
 OS_ENV: MutableMapping[str, str] = cast(MutableMapping[str, str], os.environ)  # type: ignore[attr-defined]
@@ -126,9 +133,11 @@ Current page context: """ + (current_url if current_url else "No current page")
             stream=True,
         ) as r:
             r.raise_for_status()
+            r.encoding = 'utf-8'  # Ensure proper encoding
 
             for chunk in r.iter_content(chunk_size=1024, decode_unicode=True):
-                buffer += chunk
+                if chunk:  # Only process non-empty chunks
+                    buffer += chunk
                 while True:
                     try:
                         # Find the next complete SSE line
@@ -143,12 +152,15 @@ Current page context: """ + (current_url if current_url else "No current page")
                             if data_content == "[DONE]":
                                 break
                             try:
-                                data_obj = json.loads(data_content)
+                                data_obj = json.loads(data_content, strict=False)
                                 content = data_obj["choices"][0]["delta"].get("content")
                                 if content:
+                                    # Ensure content is properly encoded UTF-8 string
+                                    if isinstance(content, bytes):
+                                        content = content.decode('utf-8', errors='replace')
                                     ai_response += content
                                     self.streaming_chunk.emit(content)
-                            except json.JSONDecodeError:
+                            except (json.JSONDecodeError, UnicodeDecodeError, KeyError):
                                 pass
                     except Exception:
                         break
@@ -172,15 +184,31 @@ Current page context: """ + (current_url if current_url else "No current page")
 
     def wrap_response_in_html(self, content, query):
         """Wrap AI text response in nice HTML"""
-        # Convert markdown-like formatting to HTML
-        content = content.replace("**", "<strong>").replace("**", "</strong>")
-        content = content.replace("*", "<em>").replace("*", "</em>")
-        content = content.replace("\n\n", "</p><p>")
-        content = content.replace("\n", "<br>")
+        # Properly escape HTML first
+        import html as html_module
+        content = html_module.escape(content)
+
+        # Convert markdown-like formatting to HTML with proper escaping
+        # Handle bold text properly
+        import re
+        content = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', content)
+        content = re.sub(r'\*(.+?)\*', r'<em>\1</em>', content)
+
+        # Handle line breaks properly
+        content = content.replace('\n\n', '</p><p>')
+        content = content.replace('\n', '<br>')
+
+        # Ensure content is wrapped in paragraphs
+        if not content.startswith('<p>'):
+            content = f'<p>{content}</p>'
+        if content.endswith('<br>'):
+            content = content[:-4] + '</p>'
 
         return f"""<!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Response</title>
     <style>
         body {{ 
@@ -486,9 +514,7 @@ class VimBrowser(QMainWindow):
         self.initial_load = True
         self._init_ai_overlay()
         self._init_profile_and_browser()
-        self._init_nav_container()
-        self._init_tab_bar()
-        self._init_progress_bar()
+        self._init_status_bar()
         self._init_command_line()
         self._init_mode_timer()
         self._connect_browser_signals()
@@ -545,26 +571,54 @@ class VimBrowser(QMainWindow):
         except Exception as e:
             print(f"WebEngine initialization error: {e}")
             self.browser = QWebEngineView()
-        self.setCentralWidget(self.browser)
         self.setMenuBar(None)
         self.statusBar().hide()
+        self.setStyleSheet("""
+            QMainWindow {
+                background-color: #1e1e1e;
+                color: #ffffff;
+            }
+            QStatusBar {
+                background-color: #2d2d2d;
+                color: #ffffff;
+                border-top: 1px solid #555;
+            }
+        """)
 
-    def _init_nav_container(self):
-        self.navbar_container = QWidget(self)
-        layout = QVBoxLayout(self.navbar_container)
+    def _init_status_bar(self):
+        self.status_widget = QWidget(self)
+        self.status_widget.setFixedHeight(25)
+
+        layout = QVBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
-        self.setMenuWidget(self.navbar_container)
+        layout.setSpacing(0)
 
-    def _init_tab_bar(self):
-        self.tab_bar = QTabBar()
-        self.tab_bar.setMovable(True)
-        self.navbar_container.layout().addWidget(self.tab_bar)
-        self.tab_bar.currentChanged.connect(self._on_tab_changed)
+        # Create status bar content
+        self.vim_status = QLabel()
+        self.vim_status.setStyleSheet("""
+            QLabel {
+                background-color: #2d2d2d;
+                color: #ffffff;
+                padding: 4px 8px;
+                font-family: monospace;
+                font-size: 12px;
+                border: none;
+            }
+        """)
 
-    def _init_progress_bar(self):
-        self.progress_bar = QProgressBar()
-        self.progress_bar.hide()
-        self.navbar_container.layout().addWidget(self.progress_bar)
+        layout.addWidget(self.vim_status)
+        self.status_widget.setLayout(layout)
+
+        # Position at bottom
+        container = QWidget()
+        main_layout = QVBoxLayout(container)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+        main_layout.addWidget(self.browser)
+        main_layout.addWidget(self.status_widget)
+
+        self.setCentralWidget(container)
+
 
     def _init_command_line(self):
         self.command_line = QLineEdit(self)
@@ -580,14 +634,69 @@ class VimBrowser(QMainWindow):
         self.mode_timer.setSingleShot(True)
 
     def _connect_browser_signals(self):
-        self.browser.loadStarted.connect(lambda: self.progress_bar.show())
-        self.browser.loadProgress.connect(lambda p: self.progress_bar.setValue(p))
-        self.browser.loadFinished.connect(lambda ok: self.progress_bar.hide())
         self.browser.loadStarted.connect(lambda: print("Page load started"))
         self.browser.loadProgress.connect(lambda p: print(f"Load progress: {p}%"))
         self.browser.loadFinished.connect(
             lambda ok: print(f"Page load finished: {'SUCCESS' if ok else 'FAILED'}")
         )
+        self.browser.loadFinished.connect(self._setup_insert_mode_detection)
+
+    def _setup_insert_mode_detection(self):
+        """Set up JavaScript to detect when input fields are focused"""
+        js_code = """
+        (function() {
+            function updateMode(isInsert) {
+                window.vimBrowserInsertMode = isInsert;
+            }
+
+            function addListeners() {
+                const inputs = document.querySelectorAll('input, textarea, [contenteditable="true"]');
+                inputs.forEach(function(element) {
+                    element.addEventListener('focus', function() {
+                        updateMode(true);
+                    });
+                    element.addEventListener('blur', function() {
+                        updateMode(false);
+                    });
+                });
+            }
+
+            // Run immediately and also when DOM changes
+            addListeners();
+
+            // Use MutationObserver to detect new inputs added dynamically
+            const observer = new MutationObserver(function(mutations) {
+                mutations.forEach(function(mutation) {
+                    if (mutation.type === 'childList') {
+                        addListeners();
+                    }
+                });
+            });
+
+            observer.observe(document.body, {
+                childList: true,
+                subtree: true
+            });
+        })();
+        """
+        self.browser.page().runJavaScript(js_code)
+
+        # Set up timer to check insert mode status
+        self.insert_mode_timer = QTimer()
+        self.insert_mode_timer.timeout.connect(self._check_insert_mode)
+        self.insert_mode_timer.start(200)  # Check every 200ms
+
+    def _check_insert_mode(self):
+        """Check if we're in insert mode by querying JavaScript"""
+        def handle_result(result):
+            if result and self.mode == "NORMAL":
+                self.mode = "INSERT"
+                self.update_title()
+            elif not result and self.mode == "INSERT":
+                self.mode = "NORMAL"
+                self.update_title()
+
+        self.browser.page().runJavaScript("window.vimBrowserInsertMode || false", handle_result)
 
     def _current_url(self) -> str:
         if hasattr(self, "browser") and self.browser:
@@ -903,10 +1012,8 @@ class VimBrowser(QMainWindow):
         if url not in self.buffers:
             self.buffers.append(url)
             self.current_buffer = len(self.buffers) - 1
-            self.tab_bar.addTab(url.split("/")[2] if "//" in url else url)
         else:
             self.current_buffer = self.buffers.index(url)
-        self.tab_bar.setCurrentIndex(self.current_buffer)
 
         if self.initial_load:
             self.browser.load(qurl)
@@ -938,7 +1045,6 @@ class VimBrowser(QMainWindow):
             if self.current_buffer >= len(self.buffers):
                 self.current_buffer = len(self.buffers) - 1
             self.browser.load(QUrl(self.buffers[self.current_buffer]))
-            self.tab_bar.removeTab(self.current_buffer)
         else:
             self.close()
         self.update_title()
@@ -1069,29 +1175,23 @@ class VimBrowser(QMainWindow):
             self.mode_timer.start(3000)
 
     def update_title(self):
-        if self.mode == "NORMAL":
+        self.setWindowTitle("Minimal Browser")
+
+        # Update vim status bar
+        if hasattr(self, 'vim_status'):
+            current_url = ""
             if self.buffers and self.current_buffer < len(self.buffers):
                 current_url = self.buffers[self.current_buffer]
                 if current_url.startswith("data:"):
-                    current_domain = "AI Generated Content"
-                elif "/" in current_url and len(current_url.split("/")) > 2:
-                    current_domain = current_url.split("/")[2]
-                else:
-                    current_domain = (
-                        current_url[:30] + "..."
-                        if len(current_url) > 30
-                        else current_url
-                    )
-                title = (
-                    f"[{self.current_buffer + 1}/{len(self.buffers)}] {current_domain}"
-                )
-            else:
-                title = "Vim Browser"
-        elif self.mode == "AI_CHAT":
-            title = "-- 工程师 CHAT --"
-        else:
-            title = f"-- {self.mode} --"
-        self.setWindowTitle(title)
+                    current_url = "AI Generated Content"
+                elif len(current_url) > 60:
+                    current_url = current_url[:57] + "..."
+
+            buffer_info = f"[{self.current_buffer + 1}/{len(self.buffers)}]" if self.buffers else "[0/0]"
+            mode_text = f"-- {self.mode} --" if self.mode != "NORMAL" else "NORMAL"
+
+            status_text = f"{buffer_info} {current_url} | {mode_text}"
+            self.vim_status.setText(status_text)
 
     def hide_mode_indicator(self):
         if self.mode == "NORMAL":
@@ -1319,8 +1419,3 @@ class VimBrowser(QMainWindow):
 </body>
 </html>"""
 
-    def _on_tab_changed(self, index):
-        if 0 <= index < len(self.buffers):
-            self.current_buffer = index
-            self.browser.load(QUrl(self.buffers[self.current_buffer]))
-            self.update_title()
