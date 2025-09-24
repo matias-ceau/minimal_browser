@@ -1,7 +1,7 @@
 """Abstract base class for web engines"""
 
 from abc import ABC, abstractmethod
-from typing import Callable, Optional, Any
+from typing import Callable, Any
 
 
 class WebEngine(ABC):

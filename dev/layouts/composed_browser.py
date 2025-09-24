@@ -1,6 +1,6 @@
 """4. More Complex Example with Multiple Panes:"""
 
-from PyQt6.QtWidgets import QApplication, QMainWindow, QSplitter, QTextEdit, QWidget
+from PyQt6.QtWidgets import QApplication, QMainWindow, QSplitter, QTextEdit
 from PyQt6.QtCore import Qt
 
 

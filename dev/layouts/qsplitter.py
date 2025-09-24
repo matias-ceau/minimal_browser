@@ -1,6 +1,6 @@
 """1. Using QSplitter (Most Common):"""
 
-from PyQt6.QtWidgets import QApplication, QMainWindow, QSplitter, QTextEdit, QWidget
+from PyQt6.QtWidgets import QApplication, QMainWindow, QSplitter, QTextEdit
 from PyQt6.QtCore import Qt
 
 

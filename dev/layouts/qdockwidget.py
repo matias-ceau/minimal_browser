@@ -1,4 +1,4 @@
-from PyQt6.QtWidgets import QApplication, QMainWindow, QDockWidget, QTextEdit, QWidget
+from PyQt6.QtWidgets import QApplication, QMainWindow, QDockWidget, QTextEdit
 from PyQt6.QtCore import Qt
 
 

@@ -1,6 +1,6 @@
 """Qt WebEngine implementation"""
 
-from typing import Callable, Optional
+from typing import Callable
 from .base import WebEngine
 
 try:

@@ -1,35 +1,23 @@
 #!/usr/bin/env python3
+# ruff: noqa: E402
 
 import sys
 import json
 import os
-import time
 import base64
+import html
 import requests  # type: ignore[import-untyped]
-from typing import Any, MutableMapping, Optional, cast
+from typing import MutableMapping, Optional, cast
 
-# Fix for Python 3.13 compatibility and Wayland envs
-environ: MutableMapping[str, str] = cast(MutableMapping[str, str], os.environ)
-environ.setdefault("QT_API", "pyside6")
-environ.setdefault("QT_QPA_PLATFORM", "wayland")
-environ.setdefault("WAYLAND_DISPLAY", environ.get("WAYLAND_DISPLAY", "wayland-0"))
-environ.setdefault("qt-scale-factor", "1")
-environ.setdefault("WLR_NO_HARDWARE_CURSORS", "1")
-# environ.setdefault("QT_WAYLAND_FORCE_DPI", "96")  # optional
 
 from PySide6.QtCore import QUrl, Qt, QTimer, QThread, Signal as pyqtSignal
-from PySide6.QtGui import QKeySequence, QShortcut, QFont, QPainter, QColor
+from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
-    QApplication,
     QMainWindow,
     QVBoxLayout,
     QWidget,
     QLabel,
     QLineEdit,
-    QTextEdit,
-    QScrollArea,
-    QHBoxLayout,
-    QPushButton,
     QTabBar,
     QProgressBar,
 )
@@ -50,6 +38,9 @@ def to_data_url(html: str) -> str:
     """Encode HTML content into a data URL with base64 encoding"""
     encoded_html = base64.b64encode(html.encode("utf-8")).decode("ascii")
     return f"data:text/html;base64,{encoded_html}"
+
+
+OS_ENV: MutableMapping[str, str] = cast(MutableMapping[str, str], os.environ)  # type: ignore[attr-defined]
 
 
 class AIWorker(QThread):
@@ -86,7 +77,7 @@ class AIWorker(QThread):
     def get_ai_response(self, query, current_url):
         """Get AI response from OpenRouter API"""
         # Get API key from environment variable
-        api_key = os.getenv("OPENROUTER_API_KEY")
+        api_key = OS_ENV.get("OPENROUTER_API_KEY")
         if not api_key:
             raise Exception("OPENROUTER_API_KEY environment variable not set")
 
@@ -107,7 +98,7 @@ Examples:
 Current page context: """ + (current_url if current_url else "No current page")
 
         # Prepare the API request
-        messages: list[dict[str, str]] = [
+        messages = [
             {"role": "system", "content": system_prompt},
             *self.history,
             {"role": "user", "content": query},
@@ -468,12 +459,18 @@ Current page context: """ + (current_url if current_url else "No current page")
         </div>
     </div>
 </body>
-</html>"""
+</<html>"""
 
 
 class VimBrowser(QMainWindow):
     def __init__(self, conversation_log: ConversationLog, headless: bool = False):
         super().__init__()
+        # Fix for Python 3.13 compatibility and Wayland envs
+        OS_ENV.setdefault("QT_API", "pyside6")
+        OS_ENV.setdefault("QT_QPA_PLATFORM", "wayland")
+        OS_ENV.setdefault("WAYLAND_DISPLAY", OS_ENV.get("WAYLAND_DISPLAY", "wayland-0"))
+        OS_ENV.setdefault("qt-scale-factor", "1")
+        OS_ENV.setdefault("WLR_NO_HARDWARE_CURSORS", "1")
         self.mode = "NORMAL"
         self.command_buffer = ""
         self.buffers: list[str] = []
@@ -485,10 +482,11 @@ class VimBrowser(QMainWindow):
         self.conversation_log = conversation_log
         self.conv_memory: ConversationMemory = ConversationMemory()
         self.engine = QtWebEngine() if not headless else None
+        self._dev_tools_window: Optional[QWebEngineView] = None
         self.initial_load = True
         self._init_ai_overlay()
         self._init_profile_and_browser()
-        self._init_navigation_toolbar()
+        self._init_nav_container()
         self._init_tab_bar()
         self._init_progress_bar()
         self._init_command_line()
@@ -551,31 +549,11 @@ class VimBrowser(QMainWindow):
         self.setMenuBar(None)
         self.statusBar().hide()
 
-    def _init_navigation_toolbar(self):
-        toolbar_widget = QWidget(self)
-        layout = QHBoxLayout()
-        layout.setContentsMargins(5, 5, 5, 5)
-        self.back_button = QPushButton("←")
-        self.forward_button = QPushButton("→")
-        self.reload_button = QPushButton("⟳")
-        self.newtab_button = QPushButton("+")
-        layout.addWidget(self.back_button)
-        layout.addWidget(self.forward_button)
-        layout.addWidget(self.reload_button)
-        layout.addWidget(self.newtab_button)
-        toolbar_widget.setLayout(layout)
-
+    def _init_nav_container(self):
         self.navbar_container = QWidget(self)
-        vlayout = QVBoxLayout(self.navbar_container)
-        vlayout.setContentsMargins(0, 0, 0, 0)
-        vlayout.addWidget(toolbar_widget)
+        layout = QVBoxLayout(self.navbar_container)
+        layout.setContentsMargins(0, 0, 0, 0)
         self.setMenuWidget(self.navbar_container)
-
-        # Connect
-        self.back_button.clicked.connect(self.go_back)
-        self.forward_button.clicked.connect(self.go_forward)
-        self.reload_button.clicked.connect(self.reload_page)
-        self.newtab_button.clicked.connect(self.new_buffer)
 
     def _init_tab_bar(self):
         self.tab_bar = QTabBar()
@@ -712,7 +690,6 @@ class VimBrowser(QMainWindow):
         QShortcut(QKeySequence("s"), self, self.smart_search_mode)  # Smart search
         QShortcut(QKeySequence("a"), self, self.ai_search_mode)  # AI/LLM search
         QShortcut(QKeySequence("F1"), self, self.show_help)  # Help
-        QShortcut(QKeySequence(" "), self, self.ai_chat_mode)  # AI Chat (Space)
         QShortcut(QKeySequence("F10"), self, self.toggle_dev_tools)  # Developer Tools
         QShortcut(QKeySequence("Ctrl+U"), self, self.view_source)  # View Source
         QShortcut(QKeySequence("Ctrl+I"), self, self.show_debug_info)  # Debug Info
@@ -729,14 +706,6 @@ class VimBrowser(QMainWindow):
         QShortcut(QKeySequence("Ctrl+W"), self, self.close_buffer)
         QShortcut(QKeySequence("Ctrl+R"), self, self.reload_page)
         QShortcut(QKeySequence("Ctrl+Tab"), self, self.next_buffer)
-
-        # Scrolling
-        QShortcut(QKeySequence("j"), self, lambda: self.scroll_page(50))
-        QShortcut(QKeySequence("k"), self, lambda: self.scroll_page(-50))
-        QShortcut(QKeySequence("d"), self, lambda: self.scroll_page(300))
-        QShortcut(QKeySequence("u"), self, lambda: self.scroll_page(-300))
-        QShortcut(QKeySequence("g"), self, self.scroll_top)
-        QShortcut(QKeySequence("G"), self, self.scroll_bottom)
 
     def keyPressEvent(self, event):
         if self.mode == "NORMAL":
@@ -886,6 +855,34 @@ class VimBrowser(QMainWindow):
                 self.browser.load(QUrl(self.buffers[self.current_buffer]))
                 self.update_title()
 
+    def toggle_dev_tools(self):
+        if not hasattr(self, "browser") or self.browser is None:
+            self._show_notification(
+                "Developer tools are unavailable in headless mode", timeout=3000
+            )
+            return
+
+        page = self.browser.page()
+        if not hasattr(page, "setDevToolsPage"):
+            print("Developer tools not available in this Qt version")
+            self._show_notification(
+                "Developer tools not available in this Qt version", timeout=3500
+            )
+            return
+
+        if self._dev_tools_window is None:
+            self._dev_tools_window = QWebEngineView()
+            self._dev_tools_window.setWindowTitle("Developer Tools")
+            self._dev_tools_window.resize(900, 600)
+            page.setDevToolsPage(self._dev_tools_window.page())
+
+        if self._dev_tools_window.isVisible():
+            self._dev_tools_window.hide()
+        else:
+            self._dev_tools_window.show()
+            self._dev_tools_window.raise_()
+            self._dev_tools_window.activateWindow()
+
     def search_page(self, query):
         if query:
             self.browser.findText(query)
@@ -996,6 +993,74 @@ class VimBrowser(QMainWindow):
     def quit_if_normal(self):
         if self.mode == "NORMAL":
             self.close()
+
+    def view_source(self):
+        if not hasattr(self, "browser") or self.browser is None:
+            self._show_notification("Browser instance unavailable", timeout=2500)
+            return
+
+        def handle_html(content: str) -> None:
+            if not content:
+                self._show_notification("Unable to retrieve page source", timeout=3000)
+                return
+            escaped = html.escape(content)
+            source_html = f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Page Source</title>
+                <style>
+                    body {{ background: #1e1e1e; color: #dcdcdc; margin: 0; padding: 16px; font-family: monospace; }}
+                    pre {{ white-space: pre-wrap; word-wrap: break-word; }}
+                    h1 {{ color: #4a9eff; }}
+                </style>
+            </head>
+            <body>
+                <h1>Page Source: {html.escape(self._current_url() or "unknown")}</h1>
+                <pre>{escaped}</pre>
+            </body>
+            </html>
+            """
+            self.open_url(to_data_url(source_html))
+
+        self.browser.page().toHtml(handle_html)
+
+    def show_debug_info(self):
+        debug_rows = [
+            ("Current URL", self._current_url() or "unknown"),
+            ("Mode", self.mode),
+            ("Buffers", ", ".join(self.buffers) if self.buffers else "none"),
+            (
+                "AI Worker Running",
+                "yes" if self.ai_worker and self.ai_worker.isRunning() else "no",
+            ),
+            ("Engine", self.engine.engine_name if self.engine else "None (headless)"),
+        ]
+        rows_html = "".join(
+            f"<tr><th>{html.escape(label)}</th><td>{html.escape(value)}</td></tr>"
+            for label, value in debug_rows
+        )
+        debug_html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Debug Info</title>
+            <style>
+                body {{ background: #202020; color: #f0f0f0; font-family: system-ui; padding: 24px; }}
+                table {{ border-collapse: collapse; width: 100%; max-width: 700px; }}
+                th, td {{ border: 1px solid #444; padding: 8px; text-align: left; }}
+                th {{ background: #2f2f2f; color: #4a9eff; width: 180px; }}
+            </style>
+        </head>
+        <body>
+            <h1>VimBrowser Debug Info</h1>
+            <table>
+                {rows_html}
+            </table>
+        </body>
+        </html>
+        """
+        self.open_url(to_data_url(debug_html))
 
     def show_buffers(self):
         if self.buffers:
@@ -1155,7 +1220,7 @@ class VimBrowser(QMainWindow):
         <h2>Developer Tools</h2>
         <table>
             <tr>
-                <td><span class="key">F12</span></td>
+                <td><span class="key">F10</span></td>
                 <td>Toggle developer tools</td>
             </tr>
             <tr>
