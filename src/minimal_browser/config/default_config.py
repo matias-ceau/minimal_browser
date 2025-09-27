@@ -19,6 +19,24 @@ class BrowserConfig(BaseModel):
     headless: bool = Field(default=False)
     window_size: tuple[int, int] = Field(default=(1280, 720))
     user_agent: str = Field(default="minimal_browser/1.0")
+    
+    # External browser integration settings
+    default_external_browser: Optional[str] = Field(
+        default=None,
+        description="Default browser for external opening (firefox, chrome, etc.). If None, uses system default."
+    )
+    preferred_browsers: list[str] = Field(
+        default_factory=lambda: ["firefox", "chrome", "chromium", "safari", "edge", "opera"],
+        description="Ordered list of preferred browsers for external opening"
+    )
+    external_browser_timeout: float = Field(
+        default=5.0,
+        description="Timeout in seconds for browser detection and opening"
+    )
+    cache_browser_detection: bool = Field(
+        default=True,
+        description="Cache browser availability to avoid repeated detection"
+    )
 
 
 class AIConfig(BaseModel):

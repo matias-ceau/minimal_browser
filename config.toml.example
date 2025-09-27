@@ -1,0 +1,25 @@
+# Example configuration file for Minimal Browser
+# Place this as ~/.config/minimal_browser/config.toml to customize settings
+
+[browser]
+# Window settings
+headless = false
+window_size = [1280, 720]
+user_agent = "minimal_browser/1.0"
+
+# External browser integration settings
+default_external_browser = "firefox"  # Set preferred browser: firefox, chrome, chromium, safari, edge, opera
+preferred_browsers = ["firefox", "chrome", "chromium", "safari", "edge", "opera"]  # Order of preference
+external_browser_timeout = 5.0  # Timeout in seconds for browser operations
+cache_browser_detection = true  # Cache browser availability to improve performance
+
+[ai]
+# AI model configuration
+model = "gpt-5-codex-preview"
+system_prompt = "You are a helpful assistant."
+enable_gpt5_codex_preview = true
+
+[storage]
+# Storage paths (relative to ~/.config/minimal_browser/)
+conversation_log = "conversations.json"
+vector_db_path = "vector_db"

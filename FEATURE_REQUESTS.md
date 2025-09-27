@@ -32,6 +32,10 @@ Legend: **Priority** = (High/Medium/Low), **Status** = (Idea ▢ / Planned ◧ /
 - **Summary:** Add GitHub Actions workflow running ruff + unit tests on PRs.
 - **Priority:** Medium · **Status:** ▢ Idea
 
+### FR-013: Enhanced External Browser Integration
+- **Summary:** Configurable external browser integration with health caching, preferred browser ordering, and comprehensive vim-style commands.
+- **Priority:** Medium · **Status:** ◉ Shipped
+
 ---
 
 ## P1 · AI Model Experience

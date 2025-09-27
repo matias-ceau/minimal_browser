@@ -5,6 +5,7 @@ import os
 import sys
 import html
 import base64
+import webbrowser
 import requests  # type: ignore[import-untyped]
 from typing import MutableMapping, Optional, cast
 
@@ -33,6 +34,8 @@ from .ai.structured import StructuredBrowserAgent, StructuredAIError
 from .ai.tools import ResponseProcessor
 from .rendering.artifacts import URLBuilder
 from .storage.conversations import ConversationLog
+from .config.default_config import load_config
+from .browser.external import ExternalBrowserManager
 
 
 def to_data_url(html: str) -> str:
@@ -256,6 +259,11 @@ class VimBrowser(QMainWindow):
         self.ai_stream_buffer: str = ""
         self.conversation_log = conversation_log
         self.conv_memory: ConversationMemory = ConversationMemory()
+        
+        # Load configuration and setup external browser manager
+        self.config = load_config()
+        self.external_browser_manager = ExternalBrowserManager(self.config.browser)
+        
         self.engine = QtWebEngine() if not headless else None
         self._dev_tools_window: Optional[QWebEngineView] = None
         self.initial_load = True
@@ -577,6 +585,10 @@ class VimBrowser(QMainWindow):
         QShortcut(QKeySequence("Ctrl+W"), self, self.close_buffer)
         QShortcut(QKeySequence("Ctrl+R"), self, self.reload_page)
         QShortcut(QKeySequence("Ctrl+Tab"), self, self.next_buffer)
+        
+        # External browser integration shortcuts
+        QShortcut(QKeySequence("Ctrl+Shift+O"), self, self.open_in_external_browser)
+        QShortcut(QKeySequence("e"), self, self.open_in_external_browser)
 
     def keyPressEvent(self, event):
         if self.mode == "NORMAL":
@@ -601,6 +613,7 @@ class VimBrowser(QMainWindow):
                 "u",
                 "g",
                 " ",
+                "e",
             ]:
                 # Let shortcuts handle these
                 pass
@@ -745,12 +758,80 @@ class VimBrowser(QMainWindow):
                 self.next_buffer()
             elif cmd.startswith("bp"):
                 self.prev_buffer()
+        elif cmd.startswith("browser"):
+            # Handle external browser commands
+            if cmd == "browser":
+                # Open current page in default external browser
+                self.open_in_external_browser()
+            elif cmd == "browser-list":
+                # List available browsers
+                self.list_available_browsers()
+            elif cmd.startswith("browser "):
+                # Parse browser command: "browser firefox" or "browser firefox https://example.com"
+                parts = cmd[8:].split(' ', 1)
+                if len(parts) == 1:
+                    # Just browser name, open current page
+                    browser_name = parts[0]
+                    if browser_name in ['list', '-list']:
+                        self.list_available_browsers()
+                    else:
+                        self.open_in_specific_browser(browser_name)
+                else:
+                    # Browser name and URL
+                    browser_name, url = parts
+                    self.open_in_specific_browser(browser_name, url)
+        elif cmd in ["ext", "external"]:
+            # Shorthand for opening in external browser
+            self.open_in_external_browser()
         elif cmd.isdigit():
             buf_num = int(cmd) - 1
             if 0 <= buf_num < len(self.buffers):
                 self.current_buffer = buf_num
                 self.browser.load(QUrl(self.buffers[self.current_buffer]))
                 self.update_title()
+
+    def open_in_external_browser(self, url: Optional[str] = None) -> None:
+        """Open URL in external browser using enhanced browser manager."""
+        if url is None:
+            # Get current page URL
+            current_url = self.browser.url().toString()
+            if not current_url:
+                self._show_notification("No URL to open", timeout=2500)
+                return
+            url = current_url
+        
+        success, message = self.external_browser_manager.open_url(url)
+        timeout = 2000 if success else 2500
+        self._show_notification(message, timeout=timeout)
+
+    def open_in_specific_browser(self, browser_name: str, url: Optional[str] = None) -> None:
+        """Open URL in a specific external browser."""
+        if url is None:
+            current_url = self.browser.url().toString()
+            if not current_url:
+                self._show_notification("No URL to open", timeout=2500)
+                return
+            url = current_url
+        
+        success, message = self.external_browser_manager.open_url(url, browser_name)
+        timeout = 2000 if success else 2500
+        self._show_notification(message, timeout=timeout)
+
+    def list_available_browsers(self) -> None:
+        """Show available browsers and configuration info."""
+        browser_info = self.external_browser_manager.get_browser_info()
+        
+        if browser_info["browser_count"] > 0:
+            browsers = ", ".join(browser_info["available_browsers"])
+            preferred = browser_info["preferred_browser"]
+            
+            message = f"Available: {browsers}"
+            if preferred:
+                message += f" | Preferred: {preferred}"
+            
+            self._show_notification(message, timeout=4000)
+        else:
+            self._show_notification("No external browsers detected. Using system default.", timeout=3000)
 
     def toggle_dev_tools(self):
         if not hasattr(self, "browser") or self.browser is None:
@@ -1102,6 +1183,10 @@ class VimBrowser(QMainWindow):
                 <td>Native AI chat</td>
             </tr>
             <tr>
+                <td><span class="key">e</span></td>
+                <td>Open current page in external browser</td>
+            </tr>
+            <tr>
                 <td><span class="key">/</span></td>
                 <td>Search in page</td>
             </tr>
@@ -1122,6 +1207,10 @@ class VimBrowser(QMainWindow):
             <tr>
                 <td><span class="key">Ctrl+I</span></td>
                 <td>Show debug info</td>
+            </tr>
+            <tr>
+                <td><span class="key">Ctrl+Shift+O</span></td>
+                <td>Open current page in external browser</td>
             </tr>
         </table>
     </div>
@@ -1175,6 +1264,22 @@ class VimBrowser(QMainWindow):
             <tr>
                 <td><span class="cmd">:bn/:bp</span></td>
                 <td>Next/previous buffer</td>
+            </tr>
+            <tr>
+                <td><span class="cmd">:browser</span></td>
+                <td>Open current page in external browser</td>
+            </tr>
+            <tr>
+                <td><span class="cmd">:browser &lt;name&gt;</span></td>
+                <td>Open in specific browser (firefox, chrome, etc.)</td>
+            </tr>
+            <tr>
+                <td><span class="cmd">:browser-list</span></td>
+                <td>List available browsers</td>
+            </tr>
+            <tr>
+                <td><span class="cmd">:ext</span></td>
+                <td>Open current page in external browser (shorthand)</td>
             </tr>
         </table>
     </div>
