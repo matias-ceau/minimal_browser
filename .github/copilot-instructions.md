@@ -52,18 +52,45 @@ AI-generated HTML uses base64 data URLs for immediate rendering:
 ```python
 # src/minimal_browser/minimal_browser.py
 def to_data_url(html: str) -> str:
-    html_bytes = html.encode("utf-8")
-    encoded_html = base64.b64encode(html_bytes).decode("ascii")
-    return f"data:text/html;charset=utf-8;base64,{encoded_html}"
+    """Encode HTML content into a data URL with base64 encoding"""
+    try:
+        html_bytes = html.encode("utf-8")
+        encoded_html = base64.b64encode(html_bytes).decode("ascii")
+        return f"data:text/html;charset=utf-8;base64,{encoded_html}"
+    except (UnicodeEncodeError, UnicodeDecodeError) as e:
+        # Fallback with error handling
+        html_bytes = html.encode("utf-8", errors="replace")
+        encoded_html = base64.b64encode(html_bytes).decode("ascii")
+        return f"data:text/html;charset=utf-8;base64,{encoded_html}"
 ```
+
+**Alternative rendering functions**:
+- `src/minimal_browser/rendering/html.py` provides `create_data_url()` with charset handling
+- `ensure_html()` and `wrap_content_as_html()` for content preprocessing
 
 ### OpenRouter Integration
 Streaming AI responses via OpenRouter API:
 - **Authentication**: `OPENROUTER_API_KEY` environment variable required
-- **Model configuration**: `src/minimal_browser/ai/models.py` defines available models
+- **Model configuration**: Default model is `gpt-5-codex-preview` with fallback to `claude-3.5-sonnet`
+- **Config location**: `src/minimal_browser/config/default_config.py` defines AIConfig
+- **Model override**: Modify `AIConfig.model` field or use configuration files
 - **Fallback mechanism**: Gracefully handles invalid model IDs by switching to Claude Sonnet
 
 ## Project-Specific Conventions
+
+### Project Structure
+```
+src/minimal_browser/
+├── ai/                # AI models, schemas, structured agent, parsing logic
+├── rendering/         # HTML templating + URL/data-URL builders
+├── engines/           # Web engine abstractions and the Qt implementation
+├── storage/           # Conversation logging utilities
+├── templates/         # HTML templates (AI response card, help screen)
+├── config/            # Configuration management system
+├── coordination/      # Multi-agent coordination (planned)
+├── minimal_browser.py # VimBrowser UI, command palette, AI worker wiring
+└── main.py            # Entry point + environment setup
+```
 
 ### Qt WebEngine Configuration
 Special handling for modern Python/Wayland compatibility:
@@ -95,6 +122,13 @@ AI-generated content uses template patterns in `src/minimal_browser/templates/`:
 - **ConversationMemory**: In-memory rolling buffer (20 messages max)
 - File paths: `~/.local/share/minimal_browser/` for user data
 
+### Configuration System
+Modern configuration management via `src/minimal_browser/config/default_config.py`:
+- **BrowserConfig**: Window settings, user agent, headless mode
+- **AIConfig**: Model selection, system prompts, feature flags
+- **Storage**: XDG-compliant config directory (`~/.config/minimal_browser/`)
+- **Format**: TOML-based configuration files
+
 ### Command System
 Colon commands parsed in `execute_command()`:
 - `:q` → Quit application
@@ -112,8 +146,38 @@ shortcut.activated.connect(self.handle_ai_prompt)
 
 ## Development Commands
 
-**Build/Test**: `python -m py_compile src/minimal_browser/minimal_browser.py`
-**Run**: `python -m minimal_browser` (requires OPENROUTER_API_KEY)
-**Structure**: Main entry point is `src/minimal_browser/main.py`
+**Package Management**: Project uses [uv](https://docs.astral.sh/uv/) for dependency management
+- **Install**: `uv sync` (installs all dependencies including dev group)
+- **Run**: `uv run python -m minimal_browser` (requires OPENROUTER_API_KEY)
+- **Dev Run**: `uv run python -m minimal_browser https://example.com`
+
+**Build/Test**: 
+- **Compile Check**: `python -m py_compile src/minimal_browser/minimal_browser.py`
+- **Module Structure**: Main entry point is `src/minimal_browser/main.py`
+- **Package Scripts**: `minimal-browser` command available after install
+
+**Environment Setup**:
+- Python **3.13+** required (specified in pyproject.toml)
+- OpenRouter API key: `export OPENROUTER_API_KEY=your_key_here`
 
 When modifying AI actions, always validate Pydantic schemas compile correctly and test both explicit prefixes (`HTML:`, `NAVIGATE:`) and intelligent parsing fallbacks.
+
+## Best Practices for AI-Assisted Development
+
+### Code Quality Standards
+- **Type Safety**: All AI components use Pydantic models for validation
+- **Error Handling**: Implement graceful fallbacks for AI/network failures
+- **Testing**: Manually test AI actions with various input types
+- **Documentation**: Update relevant sections when adding new patterns
+
+### Contributing Guidelines
+- Follow the established architecture patterns (Engine abstraction, AI pipeline, Modal interface)
+- Test changes against both direct AI integration and fallback scenarios
+- Maintain backward compatibility with existing AI action formats
+- See `CONTRIBUTING.md` for detailed development workflow
+
+### Debugging Tips
+- Use `python -m py_compile` for syntax validation
+- Check AI responses in browser developer tools (F12)
+- Monitor console output for encoding/parsing errors
+- Test with different AI models to ensure compatibility
