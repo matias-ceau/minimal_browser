@@ -79,11 +79,15 @@ Track progress in [`ROADMAP.md`](ROADMAP.md) and detailed feature ideas in [`FEA
 
 ## 🤝 Contributing
 
-Contributions are welcome! If you're planning a sizable change:
+Contributions are welcome! For detailed setup instructions, workflow guidance, and how to work with AI-suggested modifications, see **[CONTRIBUTING.md](CONTRIBUTING.md)**.
 
-1. Open an issue or draft proposal referencing the relevant roadmap/feature entry.
-2. Keep pull requests focused; follow conventional commit guidelines if possible.
-3. Run `uv run python -m py_compile src/minimal_browser/...` before submitting to catch syntax regressions. (Automated tests coming soon.)
+**Quick contributor checklist:**
+1. Ensure Python 3.13+ and run `uv sync` to install dependencies
+2. Test changes with `uv run python -m minimal_browser`
+3. Follow conventional commit guidelines and architectural patterns
+4. Run `uv run python -m py_compile src/minimal_browser/...` before submitting
+
+For planning larger changes, reference entries in [`ROADMAP.md`](ROADMAP.md) and [`FEATURE_REQUESTS.md`](FEATURE_REQUESTS.md).
 
 ## 📄 License
 
