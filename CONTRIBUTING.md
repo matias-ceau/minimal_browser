@@ -2,6 +2,18 @@
 
 Welcome to the Minimal Browser project! This guide will help you get set up and contributing effectively, whether you're working independently or integrating AI-suggested modifications.
 
+## 🔥 TL;DR: How to Merge AI Modifications
+
+**If an AI assistant suggested changes and you want to integrate them:**
+
+1. **Quick validation**: `python -m py_compile src/minimal_browser/[file].py`
+2. **Test functionality**: `python -m minimal_browser` (or `uv run python -m minimal_browser`)  
+3. **Check it works**: Try the specific feature the AI modified
+4. **Commit**: `git add . && git commit -m "feat: [what was changed]"`
+5. **Push**: `git push` (if working on a feature branch)
+
+**For complex changes**: Read the detailed sections below, especially "Working with AI-Suggested Modifications".
+
 ## 🚀 Quick Start
 
 ### Prerequisites
@@ -279,6 +291,35 @@ echo $OPENROUTER_API_KEY
 
 # Test with fallback model
 # Modify src/minimal_browser/ai/models.py to use a known working model
+```
+
+#### Git/merge issues
+```bash
+# If you have uncommitted changes and need to pull
+git stash
+git pull
+git stash pop
+
+# If you get merge conflicts
+git status  # shows conflicted files
+# Edit files to resolve conflicts (look for <<<< markers)
+git add [resolved_files]
+git commit
+
+# If you accidentally committed to wrong branch
+git log --oneline -5  # find the commit hash
+git checkout correct-branch
+git cherry-pick [commit_hash]
+```
+
+#### Working with forks (external contributors)
+```bash
+# Keep your fork up to date
+git remote add upstream https://github.com/matias-ceau/minimal_browser.git
+git fetch upstream
+git checkout main
+git merge upstream/main
+git push origin main
 ```
 
 ### Getting Help
