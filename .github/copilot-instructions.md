@@ -161,3 +161,23 @@ shortcut.activated.connect(self.handle_ai_prompt)
 - OpenRouter API key: `export OPENROUTER_API_KEY=your_key_here`
 
 When modifying AI actions, always validate Pydantic schemas compile correctly and test both explicit prefixes (`HTML:`, `NAVIGATE:`) and intelligent parsing fallbacks.
+
+## Best Practices for AI-Assisted Development
+
+### Code Quality Standards
+- **Type Safety**: All AI components use Pydantic models for validation
+- **Error Handling**: Implement graceful fallbacks for AI/network failures
+- **Testing**: Manually test AI actions with various input types
+- **Documentation**: Update relevant sections when adding new patterns
+
+### Contributing Guidelines
+- Follow the established architecture patterns (Engine abstraction, AI pipeline, Modal interface)
+- Test changes against both direct AI integration and fallback scenarios
+- Maintain backward compatibility with existing AI action formats
+- See `CONTRIBUTING.md` for detailed development workflow
+
+### Debugging Tips
+- Use `python -m py_compile` for syntax validation
+- Check AI responses in browser developer tools (F12)
+- Monitor console output for encoding/parsing errors
+- Test with different AI models to ensure compatibility
