@@ -5,6 +5,7 @@ import os
 import sys
 import html
 import base64
+import webbrowser
 import requests  # type: ignore[import-untyped]
 from typing import MutableMapping, Optional, cast
 
@@ -577,6 +578,10 @@ class VimBrowser(QMainWindow):
         QShortcut(QKeySequence("Ctrl+W"), self, self.close_buffer)
         QShortcut(QKeySequence("Ctrl+R"), self, self.reload_page)
         QShortcut(QKeySequence("Ctrl+Tab"), self, self.next_buffer)
+        
+        # External browser integration
+        QShortcut(QKeySequence("Ctrl+Shift+O"), self, self.open_in_external_browser)  # Open in external browser
+        QShortcut(QKeySequence("e"), self, self.open_in_external_browser)  # Quick external browser
 
     def keyPressEvent(self, event):
         if self.mode == "NORMAL":
@@ -601,6 +606,7 @@ class VimBrowser(QMainWindow):
                 "u",
                 "g",
                 " ",
+                "e",
             ]:
                 # Let shortcuts handle these
                 pass
@@ -745,12 +751,121 @@ class VimBrowser(QMainWindow):
                 self.next_buffer()
             elif cmd.startswith("bp"):
                 self.prev_buffer()
+        elif cmd.startswith("browser"):
+            # Handle external browser commands
+            if cmd == "browser":
+                # Open current page in default external browser
+                self.open_in_external_browser()
+            elif cmd == "browser-list":
+                # List available browsers
+                self.list_available_browsers()
+            elif cmd.startswith("browser "):
+                # Parse browser command: "browser firefox" or "browser firefox https://example.com"
+                parts = cmd[8:].split(' ', 1)
+                if len(parts) == 1:
+                    # Just browser name, open current page
+                    browser_name = parts[0]
+                    if browser_name in ['list', '-list']:
+                        self.list_available_browsers()
+                    else:
+                        self.open_in_specific_browser(browser_name)
+                else:
+                    # Browser name and URL
+                    browser_name, url = parts
+                    self.open_in_specific_browser(browser_name, url)
+        elif cmd in ["ext", "external"]:
+            # Shorthand for opening in external browser
+            self.open_in_external_browser()
         elif cmd.isdigit():
             buf_num = int(cmd) - 1
             if 0 <= buf_num < len(self.buffers):
                 self.current_buffer = buf_num
                 self.browser.load(QUrl(self.buffers[self.current_buffer]))
                 self.update_title()
+
+    def open_in_external_browser(self, url: Optional[str] = None) -> None:
+        """Open URL in system default browser or specified browser."""
+        if url is None:
+            # Get current page URL
+            current_url = self.browser.url().toString()
+            if not current_url or current_url.startswith("data:"):
+                self._show_notification("Cannot open data URLs in external browser", timeout=2500)
+                return
+            url = current_url
+        
+        try:
+            # Clean up the URL if it's a data URL or local content
+            if url.startswith("data:"):
+                self._show_notification("Cannot open data URLs in external browser", timeout=2500)
+                return
+            
+            # Ensure URL has protocol
+            if not url.startswith(('http://', 'https://')):
+                url = 'https://' + url
+            
+            webbrowser.open(url)
+            self._show_notification(f"Opened in external browser: {url[:50]}...", timeout=2000)
+            
+        except Exception as e:
+            print(f"Failed to open URL in external browser: {e}")
+            self._show_notification("Failed to open URL in external browser", timeout=2500)
+
+    def list_available_browsers(self) -> None:
+        """Show available browsers on the system."""
+        try:
+            # Get all registered browsers
+            browsers = []
+            
+            # Add common browser names that webbrowser might recognize
+            common_browsers = [
+                'firefox', 'chrome', 'chromium', 'safari', 'edge', 'opera'
+            ]
+            
+            for browser in common_browsers:
+                try:
+                    browser_obj = webbrowser.get(browser)
+                    if browser_obj:
+                        browsers.append(browser)
+                except webbrowser.Error:
+                    continue
+            
+            if browsers:
+                browser_list = ", ".join(browsers)
+                self._show_notification(f"Available browsers: {browser_list}", timeout=4000)
+            else:
+                self._show_notification("Using system default browser", timeout=2000)
+                
+        except Exception as e:
+            print(f"Failed to list browsers: {e}")
+            self._show_notification("Could not detect available browsers", timeout=2500)
+
+    def open_in_specific_browser(self, browser_name: str, url: Optional[str] = None) -> None:
+        """Open URL in a specific browser."""
+        if url is None:
+            current_url = self.browser.url().toString()
+            if not current_url or current_url.startswith("data:"):
+                self._show_notification("Cannot open data URLs in external browser", timeout=2500)
+                return
+            url = current_url
+        
+        try:
+            if url.startswith("data:"):
+                self._show_notification("Cannot open data URLs in external browser", timeout=2500)
+                return
+            
+            if not url.startswith(('http://', 'https://')):
+                url = 'https://' + url
+            
+            # Try to get the specific browser
+            browser_obj = webbrowser.get(browser_name)
+            browser_obj.open(url)
+            self._show_notification(f"Opened in {browser_name}: {url[:40]}...", timeout=2000)
+            
+        except webbrowser.Error:
+            self._show_notification(f"Browser '{browser_name}' not found", timeout=2500)
+        except Exception as e:
+            print(f"Failed to open URL in {browser_name}: {e}")
+            self._show_notification(f"Failed to open URL in {browser_name}", timeout=2500)
 
     def toggle_dev_tools(self):
         if not hasattr(self, "browser") or self.browser is None:
@@ -1090,6 +1205,10 @@ class VimBrowser(QMainWindow):
                 <td>Open URL</td>
             </tr>
             <tr>
+                <td><span class="key">e</span></td>
+                <td>Open current page in external browser</td>
+            </tr>
+            <tr>
                 <td><span class="key">s</span></td>
                 <td>Smart search (Google or URL)</td>
             </tr>
@@ -1122,6 +1241,10 @@ class VimBrowser(QMainWindow):
             <tr>
                 <td><span class="key">Ctrl+I</span></td>
                 <td>Show debug info</td>
+            </tr>
+            <tr>
+                <td><span class="key">Ctrl+Shift+O</span></td>
+                <td>Open current page in external browser</td>
             </tr>
         </table>
     </div>
@@ -1175,6 +1298,22 @@ class VimBrowser(QMainWindow):
             <tr>
                 <td><span class="cmd">:bn/:bp</span></td>
                 <td>Next/previous buffer</td>
+            </tr>
+            <tr>
+                <td><span class="cmd">:browser</span></td>
+                <td>Open current page in external browser</td>
+            </tr>
+            <tr>
+                <td><span class="cmd">:browser &lt;name&gt;</span></td>
+                <td>Open in specific browser (firefox, chrome, etc.)</td>
+            </tr>
+            <tr>
+                <td><span class="cmd">:browser-list</span></td>
+                <td>List available browsers</td>
+            </tr>
+            <tr>
+                <td><span class="cmd">:ext</span></td>
+                <td>Open current page in external browser (shorthand)</td>
             </tr>
         </table>
     </div>

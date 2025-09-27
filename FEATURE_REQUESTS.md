@@ -32,6 +32,10 @@ Legend: **Priority** = (High/Medium/Low), **Status** = (Idea ▢ / Planned ◧ /
 - **Summary:** Add GitHub Actions workflow running ruff + unit tests on PRs.
 - **Priority:** Medium · **Status:** ▢ Idea
 
+### FR-013: Bindings for Installed Browser Apps
+- **Summary:** Provide easy bindings to already installed browser apps for system integration.
+- **Priority:** Medium · **Status:** ◉ Shipped
+
 ---
 
 ## P1 · AI Model Experience
