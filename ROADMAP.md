@@ -1,42 +1,62 @@
-// ROADMAP.md
+# Minimal Browser Roadmap
 
-# Project Roadmap
+This roadmap summarizes near-term priorities (next 4–6 weeks) and medium-term initiatives. It is intentionally lean—create GitHub issues for each item before implementation and link back to the relevant section below.
 
-This document outlines upcoming features, refactors, and improvements for the Minimal Browser project.  
-Each item will be tracked via Git branches/issues and updated as progress is made.
+> For architecture context and a deeper critique, read [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
----
+## ✅ Recently Landed
 
-## Authentication & Security
-- [ ] Implement cookies to keep users logged in  
-- [ ] Integrate with system password store for secure credential management  
+- Structured AI pipeline powered by `pydantic-ai`
+- Rendering subsystem split (`ai/` parsing vs `rendering/` output)
+- Conversation log compaction and JSON guardrails
+- Automatic Claude Sonnet fallback when OpenRouter preview models fail
 
-## Performance
-- [ ] Explore and prototype performance improvements via C or Rust integration  
+## 📌 Active Focus (0–6 Weeks)
 
-## Architecture & Structure
-- [ ] Refactor project structure to better separate concerns  
-  - Create dedicated folders for HTML/Jinja templates  
+### P0 · Documentation & Onboarding
+- [ ] Polish README with screenshots and quick tasks _(in progress)_
+- [ ] Publish contributor setup guide (uv, lint/test commands)
+- [ ] Keep `ARCHITECTURE.md` updated with each release
 
-## AI & Tools
-- [ ] Enhance AI tool usage with Pydantic models for strict typing and clearer context  
-- [ ] Add feature to capture screenshots and allow AI queries about the current page  
-- [ ] Fix Unicode handling issues in AI generation  
+### P0 · Testing Baseline
+- [ ] Add smoke tests for `ResponseProcessor` parsing heuristics
+- [ ] Add tests for `rendering.html.ensure_html` and `URLBuilder`
+- [ ] Configure CI job running `uv run ruff check` + unit tests
 
-## Export & Sharing
-- [ ] Implement export functionality for any page to Markdown and other formats  
+### P1 · AI Model Experience
+- [ ] Expose model selection & fallback order via config/UI
+- [ ] Cache failed model IDs during a session to avoid repeat 400s
+- [ ] Document API key management and rate-limit expectations
 
-## User Interface
-- [ ] Create split-screen view with optional AI sidebar  
-- [ ] Redesign the command prompt UI to be centered and more visually appealing with icons/designs instead of plain text letters  
+### P1 · Rendering Toolkit
+- [ ] Define API for `rendering/webapps.py` (dynamic widgets, dashboards)
+- [ ] Provide reusable template snippets (cards, grids, code blocks)
+- [ ] Document sanitation guidelines for AI-generated HTML
 
-## File & Bookmark Management
-- [ ] Develop a file browser with embedding capabilities  
-- [ ] Implement recall-like smart bookmarks (supports files, code snippets, cross-context usage)  
-- [ ] Add seamless bindings for already installed browser apps  
+### P1 · Security Posture
+- [ ] Audit relaxed WebEngine settings; document risks and toggles
+- [ ] Add optional HTML sanitization toggle before loading AI output
+- [ ] Evaluate CSP or sandbox iframes for generated content
 
----
+### P2 · Storage & Productivity
+- [ ] Prototype SQLite-backed conversation history with search/filter
+- [ ] Export conversations as Markdown/HTML bundles
+- [ ] Sync bookmarks/files with embedding search (ties to `FEATURE_REQUESTS.md` FR-011/012)
 
-## Notes
-- Branching and commit guidelines must follow the **Commit & Branching Policy**.  
-- Features should be atomic and reviewed via pull request into `development` before merging to `main`.
+### P2 · UX Enhancements
+- [ ] AI sidebar / split view exploration
+- [ ] Command palette visual refresh (icons, theming)
+- [ ] Inline status overlays for AI streaming feedback
+
+## 🌅 Long-Term Ideas
+
+- Performance profiling and potential native extensions (Rust/C++)
+- Integration with system password stores and persistent login cookies
+- Screenshot capture + vision-enabled AI analysis of the current page
+- Portable packaging (AppImage, Flatpak) with environment auto-detection
+
+## 📝 Process Notes
+
+- Track work through GitHub issues/PRs linked to roadmap bullets.
+- Favor incremental changes; keep `main` shippable.
+- Update this document alongside major releases to maintain alignment with actual progress.

@@ -1,98 +1,90 @@
 # Minimal Browser
 
-A **vim-like browser with native AI integration** built with PySide6 and OpenRouter API. Navigate the web with familiar keybindings while seamlessly interacting with AI for content generation, explanations, and smart navigation.
+Minimal Browser is a vim-inspired Qt WebEngine shell with a built-in AI copilot. It combines modal keyboard navigation, a lightweight UI, and structured AI actions so you can browse, generate content, or perform smart searches without leaving a terminal-style workflow.
 
-## Quick Start
+> 📄 Looking for a deeper architectural dive? See [`ARCHITECTURE.md`](ARCHITECTURE.md).
+
+## ✨ Highlights
+
+- **Modal ergonomics:** NORMAL/COMMAND/INSERT modes with familiar vim keybindings.
+- **Native AI assistant:** Structured responses (navigate/search/html) parsed via Pydantic for deterministic actions.
+- **Pluggable engines:** Abstract `WebEngine` contract with a Qt WebEngine implementation today and hooks for GTK/others tomorrow.
+- **Smart rendering:** AI HTML responses rendered via Jinja templates and injected as data URLs for instant previews.
+- **Conversation memory:** Rolling in-memory history plus optional JSON persistence for long-running sessions.
+
+## 🧱 Project Layout
+
+```text
+src/minimal_browser/
+├── ai/                # AI models, schemas, structured agent, parsing logic
+├── rendering/         # HTML templating + URL/data-URL builders
+├── engines/           # Web engine abstractions and the Qt implementation
+├── storage/           # Conversation logging utilities
+├── templates/         # HTML templates (AI response card, help screen)
+├── minimal_browser.py # VimBrowser UI, command palette, AI worker wiring
+└── main.py            # Entry point + environment setup
+```
+
+## 🚀 Getting Started
 
 ### Prerequisites
-- Python 3.13+
-- OpenRouter API key
+
+- Python **3.13** (project managed with [uv](https://docs.astral.sh/uv/))
+- Qt WebEngine runtime (installed automatically with `PySide6` via uv)
+- An **OpenRouter** API key in your environment (`OPENROUTER_API_KEY`)
 
 ### Installation
+
 ```bash
-pip install -e .
-export OPENROUTER_API_KEY="your-api-key-here"
-minimal-browser
+uv sync
 ```
 
-### Basic Usage
-- **Space**: Ask AI anything - it can navigate, search, or create content
-- **h/j/k/l**: Navigate (vim-style)
-- **:q**: Quit
-- **:help**: Show all keybindings
-- **Escape**: Return to normal mode
+### Running the Browser
 
-## Key Features
-
-### AI Integration
-Press **Space** and ask natural language questions:
-- "navigate to github" → Opens GitHub
-- "create a todo list" → Generates interactive HTML todo app  
-- "explain quantum physics" → Creates educational content
-- "search python tutorials" → Performs web search
-
-### Modal Interface
-Familiar vim-like modes:
-- **NORMAL**: Default browsing and navigation
-- **COMMAND**: Colon commands (`:e <url>`, `:help`)
-- **AI**: Space-activated AI interaction
-
-### Engine Abstraction
-Pluggable web engine architecture:
-- Primary: Qt WebEngine (PySide6)
-- Alternative: GTK WebEngine (development)
-
-## Documentation
-
-### For Developers
-- **[GitHub Copilot Instructions](.github/copilot-instructions.md)**: Essential architecture patterns and development workflows for AI coding agents
-- **[Architecture Critique](.github/ARCHITECTURE_CRITIQUE.md)**: Current state analysis and improvement recommendations
-- **[Roadmap](ROADMAP.md)**: Planned features and development priorities
-- **[Feature Requests](FEATURE_REQUESTS.md)**: Individual feature tracking with FR-### numbering
-
-### Architecture Overview
-- **Engine Layer**: Abstract web engine interface with Qt/GTK implementations
-- **AI Pipeline**: Pydantic-validated response processing (`NAVIGATE:`, `SEARCH:`, `HTML:` formats)
-- **Storage**: JSON-based conversation logging and in-memory session management
-- **UI**: Modal keybinding system with Qt shortcuts and command palette
-
-## Development
-
-### Build & Test
 ```bash
-# Syntax validation
-python -m py_compile src/minimal_browser/minimal_browser.py
-
-# Run from source
-python -m minimal_browser
+uv run python -m minimal_browser
+# or launch with an initial URL
+uv run python -m minimal_browser https://example.com
 ```
 
-### Adding AI Actions
-1. Define Pydantic schema in `src/minimal_browser/ai/schemas.py`
-2. Update `ResponseProcessor` in `src/minimal_browser/ai/tools.py`
-3. Add parsing logic for new response patterns
-4. Wire handler in main browser class
+The first run seeds persistent profile data under `~/.minimal-browser/` and conversation history under `~/.minimal_browser/conversations.json`.
 
-### Project Structure
-```
-src/minimal_browser/
-├── ai/                 # AI integration (OpenRouter, schemas, tools)
-├── engines/            # Web engine abstraction (Qt, GTK)
-├── storage/            # Conversation logging
-├── templates/          # HTML templates for AI content
-└── minimal_browser.py  # Main application (1,569 lines - needs refactoring)
-```
+## 🤖 AI Configuration
 
-## Contributing
+AI models are defined in `src/minimal_browser/ai/models.py`. By default the browser targets `openrouter/openai/gpt-5-codex-preview`, with an automatic fallback to `anthropic/claude-3.5-sonnet` if the preview model is unavailable.
 
-See [Architecture Critique](.github/ARCHITECTURE_CRITIQUE.md) for detailed analysis of current state and improvement opportunities.
+To override the model, adjust the config returned by `AppConfig` (see `src/minimal_browser/config/default_config.py`) or extend the model registry with new entries. Be sure to provide a valid OpenRouter model slug and set the matching API key via `OPENROUTER_API_KEY`.
 
-### High Priority Items
-- Extract HTML templates from Python strings to separate files
-- Split monolithic main browser class
-- Add comprehensive error handling
-- Create development setup documentation
+## 🧭 Current Status & Known Gaps
 
-## License
+The codebase is evolving quickly. Key gaps we plan to address next:
 
-[Add license information]
+1. **Docs & onboarding:** This README and `ARCHITECTURE.md` are brand new—expect further polish, screenshots, and task-based guides.
+2. **Testing baseline:** There is no automated test suite yet. We intend to add smoke tests for AI parsing, rendering helpers, and conversation logging.
+3. **AI UX resiliency:** Errors fall back to notifications; retries and offline modes still need design.
+4. **Security review:** Qt WebEngine settings allow local content to access remote URLs and disable XSS auditing for AI-generated HTML. Documenting and tightening this behavior is on the roadmap.
+5. **Optional dependency slimming:** Packages like `boto3` and `chromadb` are currently hard dependencies even though their integrations are optional.
+
+For a detailed critique and near-term roadmap, see the **Architecture Roadmap** section in [`ARCHITECTURE.md`](ARCHITECTURE.md).
+
+## 🗺️ Roadmap Snapshot
+
+- Documentation refresh and contributor onboarding
+- Automated tests for AI pipelines and rendering
+- Configurable AI model routing with health checks
+- Rendering toolkit for richer AI-generated mini-apps
+- Storage enhancements (SQLite/LiteFS) for searchable history
+
+Track progress in [`ROADMAP.md`](ROADMAP.md) and detailed feature ideas in [`FEATURE_REQUESTS.md`](FEATURE_REQUESTS.md).
+
+## 🤝 Contributing
+
+Contributions are welcome! If you're planning a sizable change:
+
+1. Open an issue or draft proposal referencing the relevant roadmap/feature entry.
+2. Keep pull requests focused; follow conventional commit guidelines if possible.
+3. Run `uv run python -m py_compile src/minimal_browser/...` before submitting to catch syntax regressions. (Automated tests coming soon.)
+
+## 📄 License
+
+_License information pending. If you plan to distribute, confirm licensing with the project maintainer._

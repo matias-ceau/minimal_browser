@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 # ruff: noqa: E402
 
-import sys
-import json
 import os
-import base64
+import sys
 import html
+import base64
 import requests  # type: ignore[import-untyped]
 from typing import MutableMapping, Optional, cast
 
@@ -29,7 +28,10 @@ from PySide6.QtWebEngineCore import (
 
 from .engines.qt_engine import QtWebEngine
 from .ai.schemas import AIAction, ConversationMemory
-from .ai.tools import ResponseProcessor, URLBuilder
+from .ai.prompts import get_browser_assistant_prompt
+from .ai.structured import StructuredBrowserAgent, StructuredAIError
+from .ai.tools import ResponseProcessor
+from .rendering.artifacts import URLBuilder
 from .storage.conversations import ConversationLog
 
 
@@ -170,7 +172,6 @@ class CommandPalette(QWidget):
         self.input.clear()
 
 
-
 class AIWorker(QThread):
     """Worker thread for AI API calls with streaming support"""
 
@@ -202,413 +203,37 @@ class AIWorker(QThread):
             print(f"AI Worker error: {e}")
             self.response_ready.emit("error", str(e))
 
-    def get_ai_response(self, query, current_url):
-        """Get AI response from OpenRouter API"""
-        # Get API key from environment variable
-        api_key = OS_ENV.get("OPENROUTER_API_KEY")
-        if not api_key:
-            raise Exception("OPENROUTER_API_KEY environment variable not set")
+    def get_ai_response(self, query: str, current_url: str) -> str:
+        """Get a structured AI response using pydantic-ai."""
+        system_prompt = get_browser_assistant_prompt(current_url)
+        agent = StructuredBrowserAgent(
+            system_prompt=system_prompt,
+            history=self.history,
+        )
 
-        # Prepare the system prompt
-        system_prompt = """You are a browser AI assistant. Based on the user's request, you should respond with one of these formats:
+        self.progress_update.emit("Requesting structured action…")
+        try:
+            action = agent.run(query)
+        except StructuredAIError as exc:
+            raise Exception(str(exc)) from exc
+        except requests.exceptions.RequestException as exc:
+            raise Exception(f"API request failed: {exc}") from exc
+        except Exception as exc:  # pragma: no cover - defensive fallback
+            raise Exception(f"AI processing failed: {exc}") from exc
 
-1. NAVIGATE:<url> - if user wants to go to a specific website
-2. SEARCH:<query> - if user wants to search for something
-3. HTML:<html_content> - if user wants you to create/generate content
-
-Examples:
-- "go to github" → NAVIGATE:https://github.com
-- "search for python tutorials" → SEARCH:python tutorials  
-- "create a todo list" → HTML:<complete html for todo app>
-- "make a calculator" → HTML:<complete html for calculator>
-- "explain quantum physics" → HTML:<complete html explanation page>
-
-Current page context: """ + (current_url if current_url else "No current page")
-
-        # Prepare the API request
-        messages = [
-            {"role": "system", "content": system_prompt},
-            *self.history,
-            {"role": "user", "content": query},
-        ]
-
-        data = {
-            "model": "openai/gpt-5-chat",
-            "messages": messages,
-            "stream": True,
-        }
-
-        # Make streaming API request
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        }
-
-        buffer = ""
-        ai_response = ""
-
-        with requests.post(
-            "https://openrouter.ai/api/v1/chat/completions",
-            headers=headers,
-            json=data,
-            stream=True,
-        ) as r:
-            r.raise_for_status()
-            r.encoding = 'utf-8'  # Ensure proper encoding
-
-            for chunk in r.iter_content(chunk_size=1024, decode_unicode=True):
-                if chunk:  # Only process non-empty chunks
-                    buffer += chunk
-                while True:
-                    try:
-                        # Find the next complete SSE line
-                        line_end = buffer.find("\n")
-                        if line_end == -1:
-                            break
-                        line = buffer[:line_end].strip()
-                        buffer = buffer[line_end + 1 :]
-
-                        if line.startswith("data: "):
-                            data_content = line[6:]
-                            if data_content == "[DONE]":
-                                break
-                            try:
-                                data_obj = json.loads(data_content, strict=False)
-                                content = data_obj["choices"][0]["delta"].get("content")
-                                if content:
-                                    # Ensure content is properly encoded UTF-8 string
-                                    if isinstance(content, bytes):
-                                        content = content.decode('utf-8', errors='replace')
-                                    ai_response += content
-                                    self.streaming_chunk.emit(content)
-                            except (json.JSONDecodeError, UnicodeDecodeError, KeyError):
-                                pass
-                    except Exception:
-                        break
-
-        # If response doesn't match our expected formats, promote it to HTML
-        if not any(
-            ai_response.startswith(prefix)
-            for prefix in ["NAVIGATE:", "SEARCH:", "HTML:"]
-        ):
-            ai_response = f"HTML:{self.wrap_response_in_html(ai_response, query)}"
-
-        action = ResponseProcessor.parse_response(ai_response)
         action_type, payload = ResponseProcessor.action_to_tuple(action)
+
         prefix_map = {
             "navigate": "NAVIGATE:",
             "search": "SEARCH:",
             "html": "HTML:",
         }
         prefix = prefix_map.get(action_type, "HTML:")
+
+        summary = f"{action.type.upper()}: {payload[:160]}"
+        self.streaming_chunk.emit(summary)
+
         return f"{prefix}{payload}"
-
-    def wrap_response_in_html(self, content, query):
-        """Wrap AI text response in nice HTML"""
-        # Properly escape HTML first
-        import html as html_module
-        content = html_module.escape(content)
-
-        # Convert markdown-like formatting to HTML with proper escaping
-        # Handle bold text properly
-        import re
-        content = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', content)
-        content = re.sub(r'\*(.+?)\*', r'<em>\1</em>', content)
-
-        # Handle line breaks properly
-        content = content.replace('\n\n', '</p><p>')
-        content = content.replace('\n', '<br>')
-
-        # Ensure content is wrapped in paragraphs
-        if not content.startswith('<p>'):
-            content = f'<p>{content}</p>'
-        if content.endswith('<br>'):
-            content = content[:-4] + '</p>'
-
-        return f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Response</title>
-    <style>
-        body {{ 
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white; margin: 0; padding: 40px; min-height: 100vh; line-height: 1.6;
-        }}
-        .container {{ max-width: 800px; margin: 0 auto; }}
-        .header {{ text-align: center; margin-bottom: 30px; }}
-        .content {{ 
-            background: rgba(255,255,255,0.1); 
-            padding: 30px; 
-            border-radius: 15px; 
-            backdrop-filter: blur(10px);
-        }}
-        .query {{ 
-            background: rgba(0,0,0,0.2); 
-            padding: 15px; 
-            border-radius: 8px; 
-            margin: 20px 0;
-            font-style: italic;
-        }}
-        h1 {{ font-size: 2.5em; margin-bottom: 10px; }}
-        p {{ margin-bottom: 15px; }}
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>🤖 AI Assistant</h1>
-        </div>
-        <div class="content">
-            <div class="query">{query}</div>
-            <p>{content}</p>
-        </div>
-    </div>
-</body>
-</html>"""
-
-    def generate_html_page(self, query):
-        """Generate a custom HTML page based on query"""
-        return f"""HTML:<!DOCTYPE html>
-<html>
-<head>
-    <title>AI Generated Page</title>
-    <style>
-        body {{ 
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white; margin: 0; padding: 40px; min-height: 100vh;
-        }}
-        .container {{ max-width: 800px; margin: 0 auto; }}
-        h1 {{ font-size: 2.5em; margin-bottom: 20px; }}
-        .card {{ background: rgba(255,255,255,0.1); padding: 30px; border-radius: 15px; margin: 20px 0; }}
-        .btn {{ background: #4CAF50; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; }}
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>🤖 AI Response</h1>
-        <div class="card">
-            <h2>Query: {query}</h2>
-            <p>I've created this custom page based on your request. This demonstrates how the AI can generate HTML content directly in the browser.</p>
-            <button class="btn" onclick="alert('AI-generated interaction!')">Click me!</button>
-        </div>
-        <div class="card">
-            <h3>What I can do:</h3>
-            <ul>
-                <li>Navigate to websites</li>
-                <li>Generate custom HTML pages</li>
-                <li>Create interactive tools</li>
-                <li>Provide explanations</li>
-                <li>Search the web</li>
-            </ul>
-        </div>
-    </div>
-</body>
-</html>"""
-
-    def generate_todo_html(self):
-        """Generate a todo list HTML page"""
-        return """HTML:<!DOCTYPE html>
-<html>
-<head>
-    <title>AI Todo List</title>
-    <style>
-        body { font-family: system-ui; background: #f5f5f5; margin: 0; padding: 20px; }
-        .container { max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-        h1 { color: #333; text-align: center; }
-        .input-group { display: flex; margin-bottom: 20px; }
-        input { flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 5px 0 0 5px; }
-        button { padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 0 5px 5px 0; cursor: pointer; }
-        .todo-item { padding: 10px; border-bottom: 1px solid #eee; display: flex; align-items: center; }
-        .todo-item.done { text-decoration: line-through; opacity: 0.6; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>📝 AI Todo List</h1>
-        <div class="input-group">
-            <input type="text" id="todoInput" placeholder="Add a new task..." onkeypress="if(event.key==='Enter') addTodo()">
-            <button onclick="addTodo()">Add</button>
-        </div>
-        <div id="todoList"></div>
-    </div>
-    <script>
-        let todos = [];
-        function addTodo() {
-            const input = document.getElementById('todoInput');
-            if (input.value.trim()) {
-                todos.push({text: input.value, done: false});
-                input.value = '';
-                renderTodos();
-            }
-        }
-        function toggleTodo(index) {
-            todos[index].done = !todos[index].done;
-            renderTodos();
-        }
-        function renderTodos() {
-            const list = document.getElementById('todoList');
-            list.innerHTML = todos.map((todo, i) => 
-                `<div class="todo-item ${todo.done ? 'done' : ''}" onclick="toggleTodo(${i})">
-                    ${todo.text}
-                </div>`
-            ).join('');
-        }
-    </script>
-</body>
-</html>"""
-
-    def generate_calculator_html(self):
-        """Generate a calculator HTML page"""
-        return """HTML:<!DOCTYPE html>
-<html>
-<head>
-    <title>AI Calculator</title>
-    <style>
-        body { font-family: system-ui; background: #2c3e50; color: white; margin: 0; padding: 20px; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
-        .calculator { background: #34495e; padding: 20px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
-        .display { width: 100%; height: 60px; font-size: 24px; text-align: right; padding: 10px; margin-bottom: 15px; border: none; background: #2c3e50; color: white; border-radius: 5px; }
-        .buttons { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
-        button { height: 60px; font-size: 18px; border: none; border-radius: 5px; cursor: pointer; transition: all 0.2s; }
-        .num { background: #95a5a6; color: white; }
-        .op { background: #e74c3c; color: white; }
-        .eq { background: #27ae60; color: white; }
-        button:hover { transform: scale(1.05); }
-    </style>
-</head>
-<body>
-    <div class="calculator">
-        <input type="text" class="display" id="display" readonly>
-        <div class="buttons">
-            <button onclick="clearDisplay()" class="op">C</button>
-            <button onclick="deleteLast()" class="op">⌫</button>
-            <button onclick="appendToDisplay('/')" class="op">÷</button>
-            <button onclick="appendToDisplay('*')" class="op">×</button>
-            <button onclick="appendToDisplay('7')" class="num">7</button>
-            <button onclick="appendToDisplay('8')" class="num">8</button>
-            <button onclick="appendToDisplay('9')" class="num">9</button>
-            <button onclick="appendToDisplay('-')" class="op">-</button>
-            <button onclick="appendToDisplay('4')" class="num">4</button>
-            <button onclick="appendToDisplay('5')" class="num">5</button>
-            <button onclick="appendToDisplay('6')" class="num">6</button>
-            <button onclick="appendToDisplay('+')" class="op">+</button>
-            <button onclick="appendToDisplay('1')" class="num">1</button>
-            <button onclick="appendToDisplay('2')" class="num">2</button>
-            <button onclick="appendToDisplay('3')" class="num">3</button>
-            <button onclick="calculate()" class="eq" style="grid-row: span 2;">=</button>
-            <button onclick="appendToDisplay('0')" class="num" style="grid-column: span 2;">0</button>
-            <button onclick="appendToDisplay('.')" class="num">.</button>
-        </div>
-    </div>
-    <script>
-        function appendToDisplay(value) {
-            document.getElementById('display').value += value;
-        }
-        function clearDisplay() {
-            document.getElementById('display').value = '';
-        }
-        function deleteLast() {
-            const display = document.getElementById('display');
-            display.value = display.value.slice(0, -1);
-        }
-        function calculate() {
-            try {
-                const result = eval(document.getElementById('display').value.replace('×', '*').replace('÷', '/'));
-                document.getElementById('display').value = result;
-            } catch (e) {
-                document.getElementById('display').value = 'Error';
-            }
-        }
-    </script>
-</body>
-</html>"""
-
-    def generate_explanation_page(self, query):
-        """Generate an explanation page"""
-        return f"""HTML:<!DOCTYPE html>
-<html>
-<head>
-    <title>AI Explanation</title>
-    <style>
-        body {{ font-family: Georgia, serif; background: #f8f9fa; margin: 0; padding: 40px; line-height: 1.6; }}
-        .container {{ max-width: 800px; margin: 0 auto; background: white; padding: 40px; border-radius: 10px; box-shadow: 0 2px 20px rgba(0,0,0,0.1); }}
-        h1 {{ color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }}
-        .highlight {{ background: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; margin: 20px 0; }}
-        .info-box {{ background: #d1ecf1; padding: 15px; border-radius: 5px; margin: 20px 0; }}
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>🧠 AI Explanation</h1>
-        <div class="highlight">
-            <strong>Your Question:</strong> {query}
-        </div>
-        <div class="info-box">
-            <p>This is a simulated AI explanation. In a real implementation, this would connect to an AI service like OpenAI's GPT or a local language model to provide detailed explanations.</p>
-            <p>The AI could analyze your question and provide:</p>
-            <ul>
-                <li>Detailed explanations with examples</li>
-                <li>Step-by-step breakdowns</li>
-                <li>Related concepts and links</li>
-                <li>Interactive demonstrations</li>
-            </ul>
-        </div>
-        <h2>How it works:</h2>
-        <p>When you press <strong>Space</strong> in the browser, you can ask questions and the AI will either:</p>
-        <ol>
-            <li><strong>Navigate</strong> to relevant websites</li>
-            <li><strong>Generate HTML</strong> content directly in the browser</li>
-            <li><strong>Create tools</strong> like calculators, todo lists, etc.</li>
-            <li><strong>Provide explanations</strong> like this page</li>
-        </ol>
-    </div>
-</body>
-</html>"""
-
-    def generate_info_page(self, query):
-        """Generate a general info page"""
-        return f"""HTML:<!DOCTYPE html>
-<html>
-<head>
-    <title>AI Response</title>
-    <style>
-        body {{ font-family: system-ui; background: linear-gradient(45deg, #667eea, #764ba2); color: white; margin: 0; padding: 40px; min-height: 100vh; }}
-        .container {{ max-width: 700px; margin: 0 auto; }}
-        .card {{ background: rgba(255,255,255,0.15); backdrop-filter: blur(10px); padding: 30px; border-radius: 15px; margin: 20px 0; }}
-        h1 {{ font-size: 2.2em; margin-bottom: 20px; }}
-        .query {{ background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px; font-style: italic; }}
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>🤖 AI Assistant</h1>
-        <div class="card">
-            <div class="query">"{query}"</div>
-            <p>I understand you're asking about: <strong>{query}</strong></p>
-            <p>This is a demonstration of the native AI integration. In a full implementation, I would:</p>
-            <ul>
-                <li>Analyze your request using natural language processing</li>
-                <li>Determine the best response type (navigation, HTML generation, or explanation)</li>
-                <li>Provide contextual and helpful responses</li>
-                <li>Learn from the current page context</li>
-            </ul>
-        </div>
-        <div class="card">
-            <h3>Try asking me to:</h3>
-            <ul>
-                <li>"Navigate to GitHub"</li>
-                <li>"Create a todo list"</li>
-                <li>"Make a calculator"</li>
-                <li>"Explain quantum computing"</li>
-                <li>"Generate an HTML page about cats"</li>
-            </ul>
-        </div>
-    </div>
-</body>
-</<html>"""
 
 
 class VimBrowser(QMainWindow):
@@ -648,7 +273,8 @@ class VimBrowser(QMainWindow):
 
     def _init_ai_overlay(self):
         self.loading_overlay = QLabel(self)
-        self.loading_overlay.setStyleSheet("""
+        self.loading_overlay.setStyleSheet(
+            """
             QLabel {
                 background-color: rgba(0, 0, 0, 0.7);
                 color: white;
@@ -669,15 +295,16 @@ class VimBrowser(QMainWindow):
                 0% { transform: translate(-50%, -50%) rotate(0deg); }
                 100% { transform: translate(-50%, -50%) rotate(360deg); }
             }
-        """)
-        self.loading_overlay.setAlignment(Qt.AlignCenter)
+            """
+        )
+        self.loading_overlay.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.loading_overlay.hide()
         self.loading_overlay.raise_()
 
     def _init_profile_and_browser(self):
         self.profile = QWebEngineProfile()
         self.profile.setPersistentCookiesPolicy(
-            QWebEngineProfile.ForcePersistentCookies
+            QWebEngineProfile.PersistentCookiesPolicy.ForcePersistentCookies
         )
         self.profile.setPersistentStoragePath(
             os.path.join(os.path.expanduser("~"), ".minimal-browser")
@@ -693,7 +320,9 @@ class VimBrowser(QMainWindow):
         except Exception as e:
             print(f"WebEngine initialization error: {e}")
             self.browser = QWebEngineView()
-        self.setMenuBar(None)
+        menubar = self.menuBar()
+        if menubar is not None:
+            menubar.setVisible(False)
         self.statusBar().hide()
         self.setStyleSheet("""
             QMainWindow {
@@ -740,7 +369,6 @@ class VimBrowser(QMainWindow):
         main_layout.addWidget(self.status_widget)
 
         self.setCentralWidget(container)
-
 
     def _init_command_line(self):
         self.command_palette = CommandPalette(self)
@@ -819,6 +447,7 @@ class VimBrowser(QMainWindow):
 
     def _check_insert_mode(self):
         """Check if we're in insert mode by querying JavaScript"""
+
         def handle_result(result):
             if result and self.mode == "NORMAL":
                 self.mode = "INSERT"
@@ -827,7 +456,9 @@ class VimBrowser(QMainWindow):
                 self.mode = "NORMAL"
                 self.update_title()
 
-        self.browser.page().runJavaScript("window.vimBrowserInsertMode || false", handle_result)
+        self.browser.page().runJavaScript(
+            "window.vimBrowserInsertMode || false", handle_result
+        )
 
     def _current_url(self) -> str:
         if hasattr(self, "browser") and self.browser:
@@ -1014,6 +645,15 @@ class VimBrowser(QMainWindow):
         if self.mode == "NORMAL":
             self.mode = "COMMAND"
             self.show_command_line("s ")
+
+    def smart_search(self, query: str) -> None:
+        query = query.strip()
+        if not query:
+            return
+        if " " not in query and "." in query:
+            self.open_url(query)
+        else:
+            self.open_url(URLBuilder.create_search_url(query))
 
     def ai_search(self, query: str) -> None:
         self._start_ai_request(query, mode="search")
@@ -1326,7 +966,7 @@ class VimBrowser(QMainWindow):
         self.setWindowTitle("Minimal Browser")
 
         # Update vim status bar
-        if hasattr(self, 'vim_status'):
+        if hasattr(self, "vim_status"):
             current_url = ""
             if self.buffers and self.current_buffer < len(self.buffers):
                 current_url = self.buffers[self.current_buffer]
@@ -1335,7 +975,11 @@ class VimBrowser(QMainWindow):
                 elif len(current_url) > 60:
                     current_url = current_url[:57] + "..."
 
-            buffer_info = f"[{self.current_buffer + 1}/{len(self.buffers)}]" if self.buffers else "[0/0]"
+            buffer_info = (
+                f"[{self.current_buffer + 1}/{len(self.buffers)}]"
+                if self.buffers
+                else "[0/0]"
+            )
             mode_text = f"-- {self.mode} --" if self.mode != "NORMAL" else "NORMAL"
 
             status_text = f"{buffer_info} {current_url} | {mode_text}"
@@ -1566,4 +1210,3 @@ class VimBrowser(QMainWindow):
     <p style="margin-top: 40px; color: #666;"><span class="key">Press Escape</span> to return to normal browsing</p>
 </body>
 </html>"""
-
