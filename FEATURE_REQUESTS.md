@@ -110,7 +110,7 @@ Legend: **Priority** = (High/Medium/Low), **Status** = (Idea ▢ / Planned ◧ /
 
 ### FR-061: Persistent Login Cookies
 - **Summary:** Enable long-lived sessions with secure cookie storage.
-- **Priority:** Low · **Status:** ▢ Idea
+- **Priority:** Low · **Status:** ◉ Shipped
 
 ### FR-062: System Password Store Integration
 - **Summary:** Integrate with GNOME Keyring, macOS Keychain, Windows Credential Manager.

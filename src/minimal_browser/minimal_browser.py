@@ -303,7 +303,8 @@ class VimBrowser(QMainWindow):
         self.loading_overlay.raise_()
 
     def _init_profile_and_browser(self):
-        self.profile = QWebEngineProfile()
+        # Use a named profile for persistent cookies and storage
+        self.profile = QWebEngineProfile("minimal-browser", self)
         self.profile.setPersistentCookiesPolicy(
             QWebEngineProfile.PersistentCookiesPolicy.ForcePersistentCookies
         )
