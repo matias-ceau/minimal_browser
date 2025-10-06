@@ -55,6 +55,40 @@ AI models are defined in `src/minimal_browser/ai/models.py`. By default the brow
 
 To override the model, adjust the config returned by `AppConfig` (see `src/minimal_browser/config/default_config.py`) or extend the model registry with new entries. Be sure to provide a valid OpenRouter model slug and set the matching API key via `OPENROUTER_API_KEY`.
 
+### API Key Management
+
+Minimal Browser supports secure API key storage through system keychains:
+
+- **GNOME Keyring** (Linux)
+- **macOS Keychain** (macOS)
+- **Windows Credential Manager** (Windows)
+
+**Priority order for loading API keys:**
+
+1. **Environment variables** (highest priority) - `OPENROUTER_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`
+2. **System keychain** - Keys stored via `keyring` library
+3. **Runtime set keys** (lowest priority) - Temporary keys set during session
+
+**Storing keys in keychain:**
+
+```python
+from minimal_browser.ai.auth import auth_manager
+
+# Store a key in the system keychain
+auth_manager.set_key('openrouter', 'your-api-key', store_in_keychain=True)
+
+# Keys stored in keychain persist across sessions
+```
+
+**Using environment variables (traditional method):**
+
+```bash
+export OPENROUTER_API_KEY="your-api-key-here"
+uv run python -m minimal_browser
+```
+
+The keychain integration is optional - if `keyring` is not available or fails, the browser will fall back to environment variables only.
+
 ## 🧭 Current Status & Known Gaps
 
 The codebase is evolving quickly. Key gaps we plan to address next:

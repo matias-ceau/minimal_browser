@@ -77,6 +77,50 @@ uv run python -m minimal_browser https://github.com
 uv run python -m minimal_browser --debug
 ```
 
+### API Key Management
+
+Minimal Browser supports **secure API key storage** through system keychains for persistent credential management.
+
+#### Option 1: System Keychain (Recommended for Development)
+
+Store your API keys securely in your system keychain (GNOME Keyring/macOS Keychain/Windows Credential Manager):
+
+```python
+# From Python REPL or script
+from minimal_browser.ai.auth import auth_manager
+
+# Store OpenRouter key
+auth_manager.set_key('openrouter', 'sk-or-v1-...', store_in_keychain=True)
+
+# Verify it's stored
+print(auth_manager.list_keychain_providers())
+```
+
+Keys stored this way persist across sessions and don't need to be set in environment variables.
+
+#### Option 2: Environment Variables (Quick Setup)
+
+For quick testing or CI/CD environments:
+
+```bash
+export OPENROUTER_API_KEY="your-api-key-here"
+export OPENAI_API_KEY="your-openai-key"       # Optional
+export ANTHROPIC_API_KEY="your-anthropic-key" # Optional
+```
+
+**Priority order:** Environment variables take precedence over keychain storage, allowing temporary overrides.
+
+#### Checking Key Status
+
+```bash
+# Start Python REPL with the module
+python -c "
+from minimal_browser.ai.auth import auth_manager
+print('Loaded providers:', auth_manager.list_providers())
+print('Keychain providers:', auth_manager.list_keychain_providers())
+"
+```
+
 ## 🤖 Working with AI-Suggested Modifications
 
 ### Understanding AI Suggestions

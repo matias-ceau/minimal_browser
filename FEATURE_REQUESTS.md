@@ -50,7 +50,7 @@ Legend: **Priority** = (High/Medium/Low), **Status** = (Idea ▢ / Planned ◧ /
 
 ### FR-022: API Key Vault Integration
 - **Summary:** Support pulling OpenRouter keys from system keychains.
-- **Priority:** Medium · **Status:** ▢ Idea
+- **Priority:** Medium · **Status:** ◉ Shipped
 
 ---
 
@@ -114,7 +114,7 @@ Legend: **Priority** = (High/Medium/Low), **Status** = (Idea ▢ / Planned ◧ /
 
 ### FR-062: System Password Store Integration
 - **Summary:** Integrate with GNOME Keyring, macOS Keychain, Windows Credential Manager.
-- **Priority:** Medium · **Status:** ▢ Idea
+- **Priority:** Medium · **Status:** ◉ Shipped
 
 ### FR-063: AI Screenshot Analysis
 - **Summary:** Capture screenshots, feed vision-capable models, return annotations.

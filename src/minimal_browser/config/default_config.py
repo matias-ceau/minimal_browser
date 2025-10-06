@@ -35,10 +35,23 @@ class StorageConfig(BaseModel):
     vector_db_path: Path = Field(default=CONFIG_DIR / "vector_db")
 
 
+class SecurityConfig(BaseModel):
+    """Security and credential management configuration."""
+    use_system_keychain: bool = Field(
+        default=True,
+        description="Enable system keychain integration (GNOME Keyring/macOS Keychain/Windows Credential Manager) for API keys",
+    )
+    prefer_env_over_keychain: bool = Field(
+        default=True,
+        description="If true, environment variables take precedence over keychain storage",
+    )
+
+
 class AppConfig(BaseModel):
     browser: BrowserConfig = Field(default_factory=BrowserConfig)
     ai: AIConfig = Field(default_factory=AIConfig)
     storage: StorageConfig = Field(default_factory=StorageConfig)
+    security: SecurityConfig = Field(default_factory=SecurityConfig)
 
     def merge(self, overrides: Dict[str, Any]) -> "AppConfig":
         """Return a new config with overrides applied."""
@@ -95,6 +108,7 @@ __all__ = [
     "AIConfig",
     "BrowserConfig",
     "StorageConfig",
+    "SecurityConfig",
     "DEFAULT_CONFIG",
     "CONFIG_DIR",
     "CONFIG_FILE",
