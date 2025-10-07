@@ -324,6 +324,10 @@ class VimBrowser(QMainWindow):
         self.completion_index = -1
         self.completion_candidates: list[str] = []
         
+        # URL history for 'o' prompt suggestions
+        self.url_history: list[str] = []
+        self.url_history_max = 50  # Keep last 50 URLs
+        
         self._init_ai_overlay()
         self._init_profile_and_browser()
         self._init_status_bar()
@@ -456,38 +460,69 @@ class VimBrowser(QMainWindow):
         return super().eventFilter(obj, event)
 
     def handle_command_completion(self):
-        """Handle Tab key command completion for : mode."""
-        if self.active_command_prefix != ":":
-            return
-        
+        """Handle Tab key command completion for : mode and URL suggestions for o mode."""
         current_text = self.command_line.text()
         
-        # If we're cycling through completions, continue
-        if self.completion_candidates and self.completion_index >= 0:
-            self.completion_index = (self.completion_index + 1) % len(self.completion_candidates)
-            self.command_line.setText(self.completion_candidates[self.completion_index])
-            return
+        # Handle command completion for : mode
+        if self.active_command_prefix == ":":
+            # If we're cycling through completions, continue
+            if self.completion_candidates and self.completion_index >= 0:
+                self.completion_index = (self.completion_index + 1) % len(self.completion_candidates)
+                self.command_line.setText(self.completion_candidates[self.completion_index])
+                return
+            
+            # Find matching commands
+            self.completion_candidates = [
+                cmd for cmd in self.available_commands 
+                if cmd.startswith(current_text)
+            ]
+            
+            if not self.completion_candidates:
+                # No matches, reset
+                self.completion_index = -1
+                return
+            
+            if len(self.completion_candidates) == 1:
+                # Single match, complete it
+                self.command_line.setText(self.completion_candidates[0])
+                self.completion_index = -1
+                self.completion_candidates = []
+            else:
+                # Multiple matches, start cycling
+                self.completion_index = 0
+                self.command_line.setText(self.completion_candidates[0])
         
-        # Find matching commands
-        self.completion_candidates = [
-            cmd for cmd in self.available_commands 
-            if cmd.startswith(current_text)
-        ]
-        
-        if not self.completion_candidates:
-            # No matches, reset
-            self.completion_index = -1
-            return
-        
-        if len(self.completion_candidates) == 1:
-            # Single match, complete it
-            self.command_line.setText(self.completion_candidates[0])
-            self.completion_index = -1
-            self.completion_candidates = []
-        else:
-            # Multiple matches, start cycling
-            self.completion_index = 0
-            self.command_line.setText(self.completion_candidates[0])
+        # Handle URL history completion for 'o' mode
+        elif self.active_command_prefix == "o ":
+            # If we're cycling through completions, continue
+            if self.completion_candidates and self.completion_index >= 0:
+                self.completion_index = (self.completion_index + 1) % len(self.completion_candidates)
+                self.command_line.setText(self.completion_candidates[self.completion_index])
+                return
+            
+            # Find matching URLs from history
+            if current_text:
+                self.completion_candidates = [
+                    url for url in self.url_history 
+                    if current_text.lower() in url.lower()
+                ]
+            else:
+                # No text, show recent URLs
+                self.completion_candidates = self.url_history[:10]
+            
+            if not self.completion_candidates:
+                self.completion_index = -1
+                return
+            
+            if len(self.completion_candidates) == 1:
+                # Single match, complete it
+                self.command_line.setText(self.completion_candidates[0])
+                self.completion_index = -1
+                self.completion_candidates = []
+            else:
+                # Multiple matches, start cycling
+                self.completion_index = 0
+                self.command_line.setText(self.completion_candidates[0])
 
     def reset_completion(self):
         """Reset command completion state when text changes."""
@@ -681,6 +716,9 @@ class VimBrowser(QMainWindow):
         # Command mode cycling with Ctrl+Arrow keys
         QShortcut(QKeySequence("Ctrl+Down"), self, lambda: self.cycle_command_mode(1))
         QShortcut(QKeySequence("Ctrl+Up"), self, lambda: self.cycle_command_mode(-1))
+        
+        # Show URL history in 'o' mode
+        QShortcut(QKeySequence("Ctrl+Space"), self, self.show_url_history)
 
         # Normal mode shortcuts
         QShortcut(QKeySequence(":"), self, self.command_mode)
@@ -796,6 +834,23 @@ class VimBrowser(QMainWindow):
         if self.mode == "NORMAL":
             self.mode = "COMMAND"
             self.show_command_line("/")
+
+    def show_url_history(self):
+        """Show URL history in a popup when in 'o' mode."""
+        if self.mode != "COMMAND" or self.active_command_prefix != "o ":
+            return
+        
+        if not self.url_history:
+            self._show_notification("No URL history available", timeout=2000)
+            return
+        
+        # Show notification with recent URLs
+        recent_urls = self.url_history[:5]
+        history_preview = "\n".join([f"{i+1}. {url[:60]}" for i, url in enumerate(recent_urls)])
+        self._show_notification(
+            f"Recent URLs (press Tab to cycle):\n{history_preview}", 
+            timeout=5000
+        )
 
     def open_prompt(self):
         if self.mode == "NORMAL":
@@ -1069,6 +1124,13 @@ class VimBrowser(QMainWindow):
             if not url.startswith(("http://", "https://")):
                 url = "https://" + url
             qurl = QUrl(url)
+
+        # Track URL history (skip data URLs)
+        if not url.startswith("data:") and url not in self.url_history:
+            self.url_history.insert(0, url)
+            # Keep only last N URLs
+            if len(self.url_history) > self.url_history_max:
+                self.url_history = self.url_history[:self.url_history_max]
 
         # Add to buffers if not already there
         if url not in self.buffers:
@@ -1531,7 +1593,7 @@ class VimBrowser(QMainWindow):
             </tr>
             <tr>
                 <td><span class="key">:b</span></td>
-                <td>Show buffers</td>
+                <td>Show detailed buffer list with URLs</td>
             </tr>
             <tr>
                 <td><span class="key">:1,2,3...</span></td>
@@ -1545,7 +1607,7 @@ class VimBrowser(QMainWindow):
         <table>
             <tr>
                 <td><span class="key">o</span></td>
-                <td>Open URL</td>
+                <td>Open URL (with Tab completion for history)</td>
             </tr>
             <tr>
                 <td><span class="key">e</span></td>
@@ -1566,6 +1628,24 @@ class VimBrowser(QMainWindow):
             <tr>
                 <td><span class="key">/</span></td>
                 <td>Search in page</td>
+            </tr>
+        </table>
+    </div>
+    
+    <div class="section">
+        <h2>Command Prompt Features</h2>
+        <table>
+            <tr>
+                <td><span class="key">Ctrl+Up/Down</span></td>
+                <td>Cycle between command modes (:, /, o, s, a)</td>
+            </tr>
+            <tr>
+                <td><span class="key">Tab</span></td>
+                <td>Complete commands (:) or cycle URL history (o)</td>
+            </tr>
+            <tr>
+                <td><span class="key">Ctrl+Space</span></td>
+                <td>Show recent URL history (in o mode)</td>
             </tr>
         </table>
     </div>
