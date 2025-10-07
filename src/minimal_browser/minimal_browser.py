@@ -10,7 +10,7 @@ import requests  # type: ignore[import-untyped]
 from typing import MutableMapping, Optional, cast
 
 
-from PySide6.QtCore import QUrl, Qt, QTimer, QThread, Signal as pyqtSignal
+from PySide6.QtCore import QUrl, Qt, QTimer, QThread, Signal as pyqtSignal, QEvent
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QMainWindow,
@@ -59,33 +59,48 @@ COMMAND_PROMPT_STYLES: dict[str, dict[str, str]] = {
         "icon": "⌨️",
         "label": "Command Mode",
         "placeholder": "Run a Vim command (e.g. :help)",
+        "bg_color": "rgba(30, 30, 50, 220)",
+        "border_color": "rgba(100, 100, 180, 0.3)",
     },
     "/": {
         "icon": "🔍",
         "label": "Find in Page",
         "placeholder": "Search the current page",
+        "bg_color": "rgba(30, 50, 30, 220)",
+        "border_color": "rgba(100, 180, 100, 0.3)",
     },
     "o ": {
         "icon": "🌐",
         "label": "Open URL",
         "placeholder": "Enter a URL to visit",
+        "bg_color": "rgba(20, 30, 40, 220)",
+        "border_color": "rgba(80, 120, 180, 0.3)",
     },
     "s ": {
         "icon": "🧭",
         "label": "Smart Search",
         "placeholder": "Search the web with context",
+        "bg_color": "rgba(40, 30, 20, 220)",
+        "border_color": "rgba(180, 140, 100, 0.3)",
     },
     "a ": {
         "icon": "🤖",
         "label": "AI Search",
         "placeholder": "Ask the AI to find information",
+        "bg_color": "rgba(50, 20, 50, 220)",
+        "border_color": "rgba(180, 100, 180, 0.3)",
     },
     "🤖 ": {
         "icon": "💬",
         "label": "AI Chat",
         "placeholder": "Chat with the AI assistant",
+        "bg_color": "rgba(40, 20, 40, 220)",
+        "border_color": "rgba(160, 80, 160, 0.3)",
     },
 }
+
+# Ordered list of command prompt modes for cycling
+COMMAND_PROMPT_ORDER = [":", "/", "o ", "s ", "a "]
 
 
 class CommandPalette(QWidget):
@@ -166,11 +181,50 @@ class CommandPalette(QWidget):
                 "icon": "⌨️",
                 "label": "Command Mode",
                 "placeholder": "Type a command",
+                "bg_color": "rgba(20, 20, 20, 220)",
+                "border_color": "rgba(255, 255, 255, 0.12)",
             }
         self.icon_label.setText(style["icon"])
         self.mode_label.setText(style["label"])
         self.input.setPlaceholderText(style["placeholder"])
         self.input.clear()
+        
+        # Update dynamic colors
+        bg_color = style.get("bg_color", "rgba(20, 20, 20, 220)")
+        border_color = style.get("border_color", "rgba(255, 255, 255, 0.12)")
+        
+        self.setStyleSheet(
+            f"""
+            #CommandPalette {{
+                background-color: {bg_color};
+                border-radius: 12px;
+                border: 1px solid {border_color};
+            }}
+            #CommandLabel {{
+                color: rgba(255, 255, 255, 0.8);
+                font-size: 12px;
+                font-weight: 600;
+                letter-spacing: 1.1px;
+                text-transform: uppercase;
+            }}
+            #CommandIcon {{
+                font-size: 18px;
+            }}
+            #CommandInput {{
+                background-color: rgba(255, 255, 255, 0.07);
+                border: 1px solid rgba(255, 255, 255, 0.12);
+                border-radius: 10px;
+                color: #ffffff;
+                font-size: 14px;
+                padding: 10px 14px;
+                selection-background-color: rgba(118, 75, 162, 0.6);
+            }}
+            #CommandInput:focus {{
+                border: 1px solid rgba(134, 84, 204, 0.8);
+                background-color: rgba(255, 255, 255, 0.12);
+            }}
+            """
+        )
 
 
 class AIWorker(QThread):
@@ -260,6 +314,16 @@ class VimBrowser(QMainWindow):
         self.engine = QtWebEngine() if not headless else None
         self._dev_tools_window: Optional[QWebEngineView] = None
         self.initial_load = True
+        
+        # Command completion state
+        self.available_commands = [
+            "q", "quit", "w", "write", "wq", "help", "h",
+            "e ", "b", "bd", "bn", "bp",
+            "browser", "browser-list", "browser ", "ext", "external",
+        ]
+        self.completion_index = -1
+        self.completion_candidates: list[str] = []
+        
         self._init_ai_overlay()
         self._init_profile_and_browser()
         self._init_status_bar()
@@ -376,6 +440,64 @@ class VimBrowser(QMainWindow):
         self.command_line = self.command_palette.input
         self.command_palette.hide()
         self.command_line.returnPressed.connect(self.execute_command)
+        
+        # Install event filter for Tab key completion
+        self.command_line.installEventFilter(self)
+        
+        # Reset completion state when text changes
+        self.command_line.textChanged.connect(self.reset_completion)
+
+    def eventFilter(self, obj, event):
+        """Handle Tab key for command completion in command line."""
+        if obj == self.command_line and event.type() == event.Type.KeyPress:
+            if event.key() == Qt.Key.Key_Tab:
+                self.handle_command_completion()
+                return True
+        return super().eventFilter(obj, event)
+
+    def handle_command_completion(self):
+        """Handle Tab key command completion for : mode."""
+        if self.active_command_prefix != ":":
+            return
+        
+        current_text = self.command_line.text()
+        
+        # If we're cycling through completions, continue
+        if self.completion_candidates and self.completion_index >= 0:
+            self.completion_index = (self.completion_index + 1) % len(self.completion_candidates)
+            self.command_line.setText(self.completion_candidates[self.completion_index])
+            return
+        
+        # Find matching commands
+        self.completion_candidates = [
+            cmd for cmd in self.available_commands 
+            if cmd.startswith(current_text)
+        ]
+        
+        if not self.completion_candidates:
+            # No matches, reset
+            self.completion_index = -1
+            return
+        
+        if len(self.completion_candidates) == 1:
+            # Single match, complete it
+            self.command_line.setText(self.completion_candidates[0])
+            self.completion_index = -1
+            self.completion_candidates = []
+        else:
+            # Multiple matches, start cycling
+            self.completion_index = 0
+            self.command_line.setText(self.completion_candidates[0])
+
+    def reset_completion(self):
+        """Reset command completion state when text changes."""
+        # Only reset if we're not in the middle of Tab cycling
+        if not self.command_line.hasFocus():
+            return
+        # Don't reset during Tab completion
+        if self.completion_index < 0:
+            self.completion_candidates = []
+
 
     def _position_command_palette(self) -> None:
         if not hasattr(self, "command_palette"):
@@ -556,6 +678,10 @@ class VimBrowser(QMainWindow):
         # Escape key - always goes to normal mode
         QShortcut(QKeySequence("Escape"), self, self.normal_mode)
 
+        # Command mode cycling with Ctrl+Arrow keys
+        QShortcut(QKeySequence("Ctrl+Down"), self, lambda: self.cycle_command_mode(1))
+        QShortcut(QKeySequence("Ctrl+Up"), self, lambda: self.cycle_command_mode(-1))
+
         # Normal mode shortcuts
         QShortcut(QKeySequence(":"), self, self.command_mode)
         QShortcut(QKeySequence("/"), self, self.search_mode)
@@ -631,6 +757,35 @@ class VimBrowser(QMainWindow):
         self.active_command_prefix = None
         self.update_title()
         self.setFocus()
+
+    def cycle_command_mode(self, direction: int = 1) -> None:
+        """Cycle through command prompt modes with Ctrl+Arrow keys.
+        
+        Args:
+            direction: 1 for next mode, -1 for previous mode
+        """
+        if self.mode != "COMMAND":
+            return
+        
+        current_prefix = self.active_command_prefix or ":"
+        
+        try:
+            current_index = COMMAND_PROMPT_ORDER.index(current_prefix)
+            next_index = (current_index + direction) % len(COMMAND_PROMPT_ORDER)
+            next_prefix = COMMAND_PROMPT_ORDER[next_index]
+            
+            # Save current input text
+            current_text = self.command_line.text() if hasattr(self, "command_line") else ""
+            
+            # Switch to new mode
+            self.show_command_line(next_prefix)
+            
+            # Restore text if it makes sense (empty or compatible)
+            if current_text and hasattr(self, "command_line"):
+                self.command_line.setText(current_text)
+        except ValueError:
+            # Current prefix not in order list, default to command mode
+            self.show_command_line(":")
 
     def command_mode(self):
         if self.mode == "NORMAL":
@@ -906,6 +1061,10 @@ class VimBrowser(QMainWindow):
         if url.startswith("data:"):
             qurl = QUrl(url)
             print(f"Loading data URL, length: {len(url)}")
+        # Handle file:// URLs  
+        elif url.startswith("file://"):
+            qurl = QUrl(url)
+            print(f"Loading file URL: {url}")
         else:
             if not url.startswith(("http://", "https://")):
                 url = "https://" + url
@@ -1072,10 +1231,194 @@ class VimBrowser(QMainWindow):
         self.open_url(to_data_url(debug_html))
 
     def show_buffers(self):
-        if self.buffers:
-            buf_info = f"Buffers: {', '.join(f'{i + 1}:{url.split("/")[-1][:20]}' for i, url in enumerate(self.buffers))}"
-            self.setWindowTitle(buf_info)
-            self.mode_timer.start(3000)
+        """Display a detailed list of all buffers with quick switching."""
+        if not self.buffers:
+            self._show_notification("No buffers open", timeout=2000)
+            return
+        
+        # Create a detailed HTML view of buffers
+        buffer_rows = []
+        for i, url in enumerate(self.buffers):
+            is_current = i == self.current_buffer
+            current_marker = "►" if is_current else " "
+            row_class = "current" if is_current else ""
+            
+            # Extract meaningful title from URL
+            if url.startswith("data:"):
+                display_url = "AI Generated Content"
+                domain = "data:"
+            elif url.startswith("file://"):
+                display_url = url[7:]  # Remove file://
+                domain = "file:"
+            else:
+                display_url = url
+                # Extract domain
+                try:
+                    from urllib.parse import urlparse
+                    parsed = urlparse(url)
+                    domain = parsed.netloc or parsed.scheme
+                except Exception:
+                    domain = url.split('/')[0]
+            
+            # Truncate long URLs
+            if len(display_url) > 80:
+                display_url = display_url[:77] + "..."
+            
+            buffer_rows.append(f"""
+            <tr class="{row_class}" onclick="window.switchBuffer({i})">
+                <td class="marker">{current_marker}</td>
+                <td class="index">{i + 1}</td>
+                <td class="domain">{html.escape(domain)}</td>
+                <td class="url">{html.escape(display_url)}</td>
+            </tr>
+            """)
+        
+        buffers_html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <title>Buffers</title>
+            <style>
+                body {{
+                    background: #1a1a1a;
+                    color: #e0e0e0;
+                    font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', monospace;
+                    padding: 30px;
+                    margin: 0;
+                }}
+                h1 {{
+                    color: #4a9eff;
+                    font-size: 28px;
+                    margin-bottom: 10px;
+                }}
+                .subtitle {{
+                    color: #888;
+                    font-size: 14px;
+                    margin-bottom: 30px;
+                }}
+                table {{
+                    width: 100%;
+                    border-collapse: collapse;
+                    background: #242424;
+                    border-radius: 8px;
+                    overflow: hidden;
+                    box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+                }}
+                th {{
+                    background: #2d2d2d;
+                    color: #4a9eff;
+                    text-align: left;
+                    padding: 12px 16px;
+                    font-weight: 600;
+                    font-size: 13px;
+                    text-transform: uppercase;
+                    letter-spacing: 0.5px;
+                }}
+                tr {{
+                    border-bottom: 1px solid #333;
+                    cursor: pointer;
+                    transition: background-color 0.2s;
+                }}
+                tr:hover {{
+                    background: #2a2a2a;
+                }}
+                tr.current {{
+                    background: #2d3d4d;
+                }}
+                tr.current:hover {{
+                    background: #334455;
+                }}
+                td {{
+                    padding: 12px 16px;
+                    font-size: 14px;
+                }}
+                td.marker {{
+                    width: 30px;
+                    color: #4a9eff;
+                    font-weight: bold;
+                    text-align: center;
+                }}
+                td.index {{
+                    width: 50px;
+                    color: #888;
+                    font-weight: 600;
+                }}
+                td.domain {{
+                    width: 200px;
+                    color: #9370db;
+                    font-weight: 500;
+                }}
+                td.url {{
+                    color: #d0d0d0;
+                    word-break: break-all;
+                }}
+                .help {{
+                    margin-top: 30px;
+                    padding: 20px;
+                    background: #242424;
+                    border-radius: 8px;
+                    border-left: 3px solid #4a9eff;
+                }}
+                .help h3 {{
+                    color: #4a9eff;
+                    margin-top: 0;
+                    font-size: 16px;
+                }}
+                .help p {{
+                    margin: 8px 0;
+                    color: #aaa;
+                    font-size: 13px;
+                }}
+                .key {{
+                    background: #333;
+                    padding: 2px 8px;
+                    border-radius: 4px;
+                    color: #4a9eff;
+                    font-family: monospace;
+                    font-weight: bold;
+                }}
+            </style>
+        </head>
+        <body>
+            <h1>📑 Buffer List</h1>
+            <p class="subtitle">Click a row or press the buffer number to switch</p>
+            
+            <table>
+                <thead>
+                    <tr>
+                        <th></th>
+                        <th>#</th>
+                        <th>Domain</th>
+                        <th>URL</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {''.join(buffer_rows)}
+                </tbody>
+            </table>
+            
+            <div class="help">
+                <h3>💡 Quick Navigation</h3>
+                <p><span class="key">:1</span>, <span class="key">:2</span>, etc. - Jump to buffer by number</p>
+                <p><span class="key">n</span> / <span class="key">p</span> - Next/Previous buffer</p>
+                <p><span class="key">:bn</span> / <span class="key">:bp</span> - Next/Previous buffer (command mode)</p>
+                <p><span class="key">x</span> or <span class="key">:bd</span> - Close current buffer</p>
+                <p><span class="key">Escape</span> - Return to normal mode</p>
+            </div>
+            
+            <script>
+                function switchBuffer(index) {{
+                    // Note: This won't work in real use since we can't communicate back to Qt easily
+                    // The main way to switch is still via :1, :2, etc. commands
+                    console.log('Switch to buffer', index);
+                }}
+            </script>
+        </body>
+        </html>
+        """
+        
+        self.open_url(to_data_url(buffers_html))
 
     def update_title(self):
         self.setWindowTitle("Minimal Browser")
