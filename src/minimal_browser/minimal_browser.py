@@ -34,6 +34,7 @@ from .ai.structured import StructuredBrowserAgent, StructuredAIError
 from .ai.tools import ResponseProcessor
 from .rendering.artifacts import URLBuilder
 from .storage.conversations import ConversationLog
+from .export.exporter import PageExporter
 
 
 def to_data_url(html: str) -> str:
@@ -987,6 +988,23 @@ class VimBrowser(QMainWindow):
         elif cmd in ["ext", "external"]:
             # Shorthand for opening in external browser
             self.open_in_external_browser()
+        elif cmd.startswith("export"):
+            # Handle export commands
+            if cmd in ["export-html", "export html"]:
+                self.export_page_html()
+            elif cmd in ["export-md", "export-markdown", "export md"]:
+                self.export_page_markdown()
+            elif cmd in ["export-pdf", "export pdf"]:
+                self.export_page_pdf()
+            elif cmd == "export":
+                # Show export help
+                self._show_notification(
+                    "Export commands:\n"
+                    ":export-html - Save page as HTML\n"
+                    ":export-md - Convert page to Markdown\n"
+                    ":export-pdf - Save page as PDF",
+                    timeout=5000
+                )
         elif cmd.isdigit():
             buf_num = int(cmd) - 1
             if 0 <= buf_num < len(self.buffers):
@@ -1510,6 +1528,75 @@ class VimBrowser(QMainWindow):
         if self.mode == "NORMAL":
             self.update_title()
 
+    def export_page_html(self):
+        """Export current page as HTML snapshot."""
+        if not hasattr(self, "browser") or self.browser is None:
+            self._show_notification("Browser instance unavailable", timeout=2500)
+            return
+
+        def handle_html(html_content: str) -> None:
+            try:
+                exporter = PageExporter()
+                url = self._current_url() or "page"
+                output_path = exporter.export_html(html_content, url)
+                self._show_notification(
+                    f"HTML exported to:\n{output_path}",
+                    timeout=5000
+                )
+            except Exception as e:
+                self._show_notification(
+                    f"Export failed: {str(e)}",
+                    timeout=3000
+                )
+
+        self.browser.page().toHtml(handle_html)
+
+    def export_page_markdown(self):
+        """Export current page as Markdown."""
+        if not hasattr(self, "browser") or self.browser is None:
+            self._show_notification("Browser instance unavailable", timeout=2500)
+            return
+
+        def handle_html(html_content: str) -> None:
+            try:
+                exporter = PageExporter()
+                url = self._current_url() or "page"
+                output_path = exporter.export_markdown(html_content, url)
+                self._show_notification(
+                    f"Markdown exported to:\n{output_path}",
+                    timeout=5000
+                )
+            except Exception as e:
+                self._show_notification(
+                    f"Export failed: {str(e)}",
+                    timeout=3000
+                )
+
+        self.browser.page().toHtml(handle_html)
+
+    def export_page_pdf(self):
+        """Export current page as PDF."""
+        if not hasattr(self, "browser") or self.browser is None:
+            self._show_notification("Browser instance unavailable", timeout=2500)
+            return
+
+        def handle_html(html_content: str) -> None:
+            try:
+                exporter = PageExporter()
+                url = self._current_url() or "page"
+                output_path = exporter.export_pdf(html_content, url)
+                self._show_notification(
+                    f"PDF exported to:\n{output_path}",
+                    timeout=5000
+                )
+            except Exception as e:
+                self._show_notification(
+                    f"Export failed: {str(e)}",
+                    timeout=3000
+                )
+
+        self.browser.page().toHtml(handle_html)
+
     def get_help_content(self):
         return """<!DOCTYPE html>
 <html>
@@ -1722,6 +1809,18 @@ class VimBrowser(QMainWindow):
             <tr>
                 <td><span class="cmd">:bn/:bp</span></td>
                 <td>Next/previous buffer</td>
+            </tr>
+            <tr>
+                <td><span class="cmd">:export-html</span></td>
+                <td>Export page as HTML snapshot</td>
+            </tr>
+            <tr>
+                <td><span class="cmd">:export-md</span></td>
+                <td>Export page as Markdown</td>
+            </tr>
+            <tr>
+                <td><span class="cmd">:export-pdf</span></td>
+                <td>Export page as PDF</td>
             </tr>
             <tr>
                 <td><span class="cmd">:browser</span></td>
