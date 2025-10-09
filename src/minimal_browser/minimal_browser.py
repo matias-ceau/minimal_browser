@@ -35,6 +35,7 @@ from .ai.tools import ResponseProcessor
 from .rendering.artifacts import URLBuilder
 from .storage.conversations import ConversationLog
 from .templates import get_help_content
+from .config.default_config import DEFAULT_CONFIG
 
 
 def to_data_url(html: str) -> str:
@@ -54,54 +55,9 @@ def to_data_url(html: str) -> str:
 
 OS_ENV: MutableMapping[str, str] = cast(MutableMapping[str, str], os.environ)  # type: ignore[attr-defined]
 
-
-COMMAND_PROMPT_STYLES: dict[str, dict[str, str]] = {
-    ":": {
-        "icon": "⌨️",
-        "label": "Command Mode",
-        "placeholder": "Run a Vim command (e.g. :help)",
-        "bg_color": "rgba(30, 30, 50, 220)",
-        "border_color": "rgba(100, 100, 180, 0.3)",
-    },
-    "/": {
-        "icon": "🔍",
-        "label": "Find in Page",
-        "placeholder": "Search the current page",
-        "bg_color": "rgba(30, 50, 30, 220)",
-        "border_color": "rgba(100, 180, 100, 0.3)",
-    },
-    "o ": {
-        "icon": "🌐",
-        "label": "Open URL",
-        "placeholder": "Enter a URL to visit",
-        "bg_color": "rgba(20, 30, 40, 220)",
-        "border_color": "rgba(80, 120, 180, 0.3)",
-    },
-    "s ": {
-        "icon": "🧭",
-        "label": "Smart Search",
-        "placeholder": "Search the web with context",
-        "bg_color": "rgba(40, 30, 20, 220)",
-        "border_color": "rgba(180, 140, 100, 0.3)",
-    },
-    "a ": {
-        "icon": "🤖",
-        "label": "AI Search",
-        "placeholder": "Ask the AI to find information",
-        "bg_color": "rgba(50, 20, 50, 220)",
-        "border_color": "rgba(180, 100, 180, 0.3)",
-    },
-    "🤖 ": {
-        "icon": "💬",
-        "label": "AI Chat",
-        "placeholder": "Chat with the AI assistant",
-        "bg_color": "rgba(40, 20, 40, 220)",
-        "border_color": "rgba(160, 80, 160, 0.3)",
-    },
-}
-
-# Ordered list of command prompt modes for cycling
-COMMAND_PROMPT_ORDER = [":", "/", "o ", "s ", "a "]
+# Load UI configuration
+COMMAND_PROMPT_STYLES = DEFAULT_CONFIG.ui.command_prompt_styles
+COMMAND_PROMPT_ORDER = DEFAULT_CONFIG.ui.command_prompt_order
 
 
 class CommandPalette(QWidget):

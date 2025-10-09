@@ -47,11 +47,65 @@ class SecurityConfig(BaseModel):
     )
 
 
+class UIConfig(BaseModel):
+    """UI and interaction configuration."""
+    command_prompt_styles: Dict[str, Dict[str, str]] = Field(
+        default_factory=lambda: {
+            ":": {
+                "icon": "⌨️",
+                "label": "Command Mode",
+                "placeholder": "Run a Vim command (e.g. :help)",
+                "bg_color": "rgba(30, 30, 50, 220)",
+                "border_color": "rgba(100, 100, 180, 0.3)",
+            },
+            "/": {
+                "icon": "🔍",
+                "label": "Find in Page",
+                "placeholder": "Search the current page",
+                "bg_color": "rgba(30, 50, 30, 220)",
+                "border_color": "rgba(100, 180, 100, 0.3)",
+            },
+            "o ": {
+                "icon": "🌐",
+                "label": "Open URL",
+                "placeholder": "Enter a URL to visit",
+                "bg_color": "rgba(20, 30, 40, 220)",
+                "border_color": "rgba(80, 120, 180, 0.3)",
+            },
+            "s ": {
+                "icon": "🧭",
+                "label": "Smart Search",
+                "placeholder": "Search the web with context",
+                "bg_color": "rgba(40, 30, 20, 220)",
+                "border_color": "rgba(180, 140, 100, 0.3)",
+            },
+            "a ": {
+                "icon": "🤖",
+                "label": "AI Search",
+                "placeholder": "Ask the AI to find information",
+                "bg_color": "rgba(50, 20, 50, 220)",
+                "border_color": "rgba(180, 100, 180, 0.3)",
+            },
+            "🤖 ": {
+                "icon": "💬",
+                "label": "AI Chat",
+                "placeholder": "Chat with the AI assistant",
+                "bg_color": "rgba(40, 20, 40, 220)",
+                "border_color": "rgba(160, 80, 160, 0.3)",
+            },
+        }
+    )
+    command_prompt_order: list[str] = Field(
+        default_factory=lambda: [":", "/", "o ", "s ", "a "]
+    )
+
+
 class AppConfig(BaseModel):
     browser: BrowserConfig = Field(default_factory=BrowserConfig)
     ai: AIConfig = Field(default_factory=AIConfig)
     storage: StorageConfig = Field(default_factory=StorageConfig)
     security: SecurityConfig = Field(default_factory=SecurityConfig)
+    ui: UIConfig = Field(default_factory=UIConfig)
 
     def merge(self, overrides: Dict[str, Any]) -> "AppConfig":
         """Return a new config with overrides applied."""
@@ -109,6 +163,7 @@ __all__ = [
     "BrowserConfig",
     "StorageConfig",
     "SecurityConfig",
+    "UIConfig",
     "DEFAULT_CONFIG",
     "CONFIG_DIR",
     "CONFIG_FILE",
