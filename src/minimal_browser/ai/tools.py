@@ -10,6 +10,14 @@ from pydantic import HttpUrl, ValidationError
 from ..rendering.html import ensure_html, wrap_content_as_html
 from .schemas import AIAction, HtmlAction, NavigateAction, SearchAction
 
+# Optional: Import optimized text processor for performance
+try:
+    from ..native import TextProcessor
+
+    _USE_NATIVE_OPTIMIZATION = True
+except ImportError:
+    _USE_NATIVE_OPTIMIZATION = False
+
 
 class ResponseProcessor:
     """Processes AI responses and determines actions."""
@@ -64,13 +72,23 @@ class ResponseProcessor:
             r"(?:open|visit)\s+([a-z]+\.com|[a-z]+\.org|[a-z]+\.net)",
         ]
 
-        for pattern in nav_patterns:
-            match = re.search(pattern, response_lower)
-            if match:
-                url = match.group(1)
-                if not url.startswith(("http://", "https://")):
-                    url = f"https://{url}"
-                return "navigate", url
+        # Try optimized pattern extraction if available
+        if _USE_NATIVE_OPTIMIZATION:
+            for pattern in nav_patterns:
+                url = TextProcessor.extract_url_from_text(response_lower, pattern)
+                if url:
+                    if not url.startswith(("http://", "https://")):
+                        url = f"https://{url}"
+                    return "navigate", url
+        else:
+            # Fallback to standard regex
+            for pattern in nav_patterns:
+                match = re.search(pattern, response_lower)
+                if match:
+                    url = match.group(1)
+                    if not url.startswith(("http://", "https://")):
+                        url = f"https://{url}"
+                    return "navigate", url
 
         if any(word in response_lower for word in ["search for", "find", "look up"]):
             search_match = re.search(
@@ -92,7 +110,17 @@ class ResponseProcessor:
             "website",
         }
 
-        if any(indicator in response_lower for indicator in html_indicators):
+        # Use optimized keyword check if available
+        if _USE_NATIVE_OPTIMIZATION:
+            has_html_indicator = TextProcessor.fast_string_contains(
+                response_lower, html_indicators
+            )
+        else:
+            has_html_indicator = any(
+                indicator in response_lower for indicator in html_indicators
+            )
+
+        if has_html_indicator:
             return "html", response
 
         if len(response.split()) <= 5:

@@ -106,7 +106,7 @@ Legend: **Priority** = (High/Medium/Low), **Status** = (Idea ▢ / Planned ◧ /
 
 ### FR-060: Native Performance Modules
 - **Summary:** Profile hotspots and trial Rust/C++ modules for CPU/GPU-heavy tasks.
-- **Priority:** Low · **Status:** ▢ Idea
+- **Priority:** Low · **Status:** ◑ In Progress
 
 ### FR-061: Persistent Login Cookies
 - **Summary:** Enable long-lived sessions with secure cookie storage.
