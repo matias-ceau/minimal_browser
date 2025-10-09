@@ -51,9 +51,13 @@ class TextProcessor:
         Returns:
             Matched URL or None
         """
-        # Future: Use native module if available
-        # if TextProcessor._check_native_module():
-        #     return TextProcessor._native_module.extract_url(text, pattern)
+        # Use native module if available
+        if TextProcessor._check_native_module() and TextProcessor._native_module:
+            try:
+                return TextProcessor._native_module.extract_url_from_text(text, pattern)
+            except Exception:
+                # Fall back to Python on any error
+                pass
 
         # Pure Python fallback
         match = re.search(pattern, text, re.IGNORECASE)
@@ -70,9 +74,13 @@ class TextProcessor:
         Returns:
             List of (pattern, match) tuples
         """
-        # Future: Use native module if available
-        # if TextProcessor._check_native_module():
-        #     return TextProcessor._native_module.find_all_patterns(text, patterns)
+        # Use native module if available
+        if TextProcessor._check_native_module() and TextProcessor._native_module:
+            try:
+                return TextProcessor._native_module.find_all_patterns(text, patterns)
+            except Exception:
+                # Fall back to Python on any error
+                pass
 
         # Pure Python fallback
         results = []
@@ -96,9 +104,15 @@ class TextProcessor:
         Returns:
             True if any keyword is found
         """
-        # Future: Use native module if available
-        # if TextProcessor._check_native_module():
-        #     return TextProcessor._native_module.contains_any(text.lower(), keywords)
+        # Use native module if available
+        if TextProcessor._check_native_module() and TextProcessor._native_module:
+            try:
+                return TextProcessor._native_module.fast_string_contains(
+                    text.lower(), keywords
+                )
+            except Exception:
+                # Fall back to Python on any error
+                pass
 
         # Pure Python fallback
         text_lower = text.lower()
@@ -114,9 +128,13 @@ class TextProcessor:
         Returns:
             Base64 encoded string
         """
-        # Future: Use native module if available
-        # if TextProcessor._check_native_module():
-        #     return TextProcessor._native_module.base64_encode(data)
+        # Use native module if available
+        if TextProcessor._check_native_module() and TextProcessor._native_module:
+            try:
+                return TextProcessor._native_module.base64_encode_optimized(data)
+            except Exception:
+                # Fall back to Python on any error
+                pass
 
         # Pure Python fallback
         import base64
@@ -135,9 +153,13 @@ class TextProcessor:
         Returns:
             HTML formatted text
         """
-        # Future: Use native module if available
-        # if TextProcessor._check_native_module():
-        #     return TextProcessor._native_module.markdown_to_html(text)
+        # Use native module if available
+        if TextProcessor._check_native_module() and TextProcessor._native_module:
+            try:
+                return TextProcessor._native_module.markdown_to_html(text)
+            except Exception:
+                # Fall back to Python on any error
+                pass
 
         # Pure Python fallback
         result = re.sub(r"\*\*(.*?)\*\*", r"<strong>\1</strong>", text)
