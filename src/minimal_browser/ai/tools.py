@@ -1,4 +1,9 @@
-"""AI tools and response processing."""
+"""AI tools and response processing.
+
+This module provides utilities for parsing AI responses and converting them
+into type-safe Pydantic models. All parsing operations enforce strict type
+validation to ensure data integrity throughout the AI interaction pipeline.
+"""
 
 from __future__ import annotations
 
@@ -20,11 +25,34 @@ except ImportError:
 
 
 class ResponseProcessor:
-    """Processes AI responses and determines actions."""
+    """Processes AI responses and determines actions.
+    
+    This class provides static methods for parsing AI responses into type-safe
+    Pydantic models. It supports both explicit prefixes (NAVIGATE:, SEARCH:, HTML:)
+    and intelligent parsing based on content patterns.
+    
+    All parsing operations enforce strict type validation using Pydantic models
+    to ensure data integrity throughout the AI interaction pipeline.
+    """
 
     @staticmethod
     def parse_response(response: str) -> AIAction:
-        """Parse AI response text and return a validated action model."""
+        """Parse AI response text and return a validated action model.
+        
+        This is the primary entry point for converting raw AI text responses
+        into type-safe AIAction instances. The method handles various response
+        formats and falls back to intelligent parsing when explicit prefixes
+        are not provided.
+        
+        Args:
+            response: Raw AI response text (may include context markers)
+            
+        Returns:
+            A validated AIAction instance (NavigateAction, SearchAction, or HtmlAction)
+            
+        Raises:
+            ValidationError: If the response cannot be parsed into a valid action
+        """
 
         response_text, query = ResponseProcessor._extract_query_from_context(response)
         action_type, payload = ResponseProcessor._infer_action_components(
@@ -131,7 +159,23 @@ class ResponseProcessor:
 
     @staticmethod
     def _build_action(action_type: str, payload: str, query: str) -> AIAction:
-        """Convert action tuple into a validated `AIAction` instance."""
+        """Convert action tuple into a validated `AIAction` instance.
+        
+        This method attempts to create the appropriate Pydantic model based on
+        the action type, with fallback logic to ensure a valid action is always
+        returned. All created actions are validated by Pydantic.
+        
+        Args:
+            action_type: The type of action ("navigate", "search", or "html")
+            payload: The action payload data
+            query: The original user query (for fallback context)
+            
+        Returns:
+            A validated AIAction instance
+            
+        Raises:
+            ValidationError: Only if all fallback attempts fail (rare)
+        """
 
         if action_type == "navigate":
             normalized = ResponseProcessor._normalize_url(payload)
@@ -157,7 +201,20 @@ class ResponseProcessor:
 
     @staticmethod
     def action_to_tuple(action: AIAction) -> Tuple[str, str]:
-        """Convert an `AIAction` instance back into (type, payload) format."""
+        """Convert an `AIAction` instance back into (type, payload) format.
+        
+        This provides backward compatibility with code that expects the legacy
+        (type, payload) tuple format instead of Pydantic models.
+        
+        Args:
+            action: A validated AIAction instance
+            
+        Returns:
+            A tuple of (action_type, payload)
+            
+        Raises:
+            TypeError: If action is not a recognized AIAction type
+        """
 
         if isinstance(action, NavigateAction):
             return action.type, str(action.url)

@@ -50,7 +50,7 @@ This roadmap summarizes near-term priorities (next 4–6 weeks) and medium-term 
 
 ## 🌅 Long-Term Ideas
 
-- Performance profiling and potential native extensions (Rust/C++)
+- Performance profiling and potential native extensions (Rust/C++) - **See `docs/TAURI_INVESTIGATION.md`**
 - Integration with system password stores and persistent login cookies
 - Screenshot capture + vision-enabled AI analysis of the current page
 - Portable packaging (AppImage, Flatpak) with environment auto-detection

@@ -146,6 +146,7 @@ For a detailed critique and near-term roadmap, see the **Architecture Roadmap** 
 - Configurable AI model routing with health checks
 - Rendering toolkit for richer AI-generated mini-apps
 - Storage enhancements (SQLite/LiteFS) for searchable history
+- **Native module optimization**: Investigation into Tauri and Rust/C++ modules (see `docs/TAURI_INVESTIGATION.md`)
 
 Track progress in [`ROADMAP.md`](ROADMAP.md) and detailed feature ideas in [`FEATURE_REQUESTS.md`](FEATURE_REQUESTS.md).
 
