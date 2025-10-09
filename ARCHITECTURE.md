@@ -62,7 +62,7 @@ Minimal Browser is a modal, vim-inspired Qt WebEngine shell with a tightly integ
 | Layer      | Module(s)                                           | Role                                                |
 | ---------- | --------------------------------------------------- | --------------------------------------------------- |
 | UI & Modes | `minimal_browser.VimBrowser`, `CommandPalette`      | Modal UX, keybindings, status reporting             |
-| Engines    | `engines/base.py`, `engines/qt_engine.py`           | Abstract + Qt WebEngine implementation              |
+| Engines    | [[engines/base.py]], [[engines/qt_engine.py]]           | Abstract + Qt WebEngine implementation              |
 | AI Models  | `ai/models.py`, `ai/structured.py`, `ai/client.py`  | Model registry, structured agent, direct API client |
 | AI Parsing | `ai/tools.py`, `ai/schemas.py`                      | Parse model output into typed actions               |
 | Rendering  | `rendering/html.py`, `rendering/artifacts.py`       | HTML templating, data URL generation, URL resolver  |
