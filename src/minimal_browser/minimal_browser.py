@@ -320,6 +320,7 @@ class VimBrowser(QMainWindow):
             "q", "quit", "w", "write", "wq", "help", "h",
             "e ", "b", "bd", "bn", "bp",
             "browser", "browser-list", "browser ", "ext", "external",
+            "files", "files ", "fb", "fb ", "index", "index ", "search-files ",
         ]
         self.completion_index = -1
         self.completion_candidates: list[str] = []
@@ -987,6 +988,33 @@ class VimBrowser(QMainWindow):
         elif cmd in ["ext", "external"]:
             # Shorthand for opening in external browser
             self.open_in_external_browser()
+        elif cmd.startswith("files") or cmd.startswith("fb"):
+            # File browser commands
+            if cmd in ["files", "fb"]:
+                # Show file browser for current directory
+                self.show_file_browser()
+            elif cmd.startswith("files "):
+                # Browse specific directory
+                path = cmd[6:].strip()
+                self.show_file_browser(path)
+            elif cmd.startswith("fb "):
+                # Browse specific directory (shorthand)
+                path = cmd[3:].strip()
+                self.show_file_browser(path)
+        elif cmd.startswith("index"):
+            # Index files with embeddings
+            if cmd.startswith("index "):
+                path = cmd[6:].strip()
+                self.index_directory(path)
+            else:
+                self.index_directory()
+        elif cmd.startswith("search-files"):
+            # Search indexed files
+            if cmd.startswith("search-files "):
+                query = cmd[13:].strip()
+                self.search_indexed_files(query)
+            else:
+                self._show_notification("Usage: :search-files <query>", timeout=2000)
         elif cmd.isdigit():
             buf_num = int(cmd) - 1
             if 0 <= buf_num < len(self.buffers):
@@ -1483,6 +1511,175 @@ class VimBrowser(QMainWindow):
         
         self.open_url(to_data_url(buffers_html))
 
+    def show_file_browser(self, path: Optional[str] = None):
+        """Display file browser for the given path."""
+        from pathlib import Path
+        from .storage.file_browser import FileBrowser
+        from .rendering.html import render_template, create_data_url
+        
+        try:
+            # Initialize file browser
+            if path:
+                target_path = Path(path).expanduser().resolve()
+            else:
+                target_path = Path.home()
+            
+            browser = FileBrowser(target_path)
+            
+            # Get directory listing
+            entries = browser.list_directory()
+            
+            # Prepare context for template
+            context = {
+                "current_path": str(browser.current_path),
+                "parent_path": str(browser.current_path.parent) if browser.current_path.parent != browser.current_path else None,
+                "home_path": str(Path.home()),
+                "entries": [entry.to_dict() for entry in entries],
+            }
+            
+            # Render template
+            html_content = render_template("file_browser.html", context)
+            
+            # Open in browser
+            self.open_url(create_data_url(html_content))
+            
+        except Exception as e:
+            error_msg = f"Failed to browse directory: {e}"
+            self._show_notification(error_msg, timeout=3000)
+            print(error_msg)
+
+    def index_directory(self, path: Optional[str] = None):
+        """Index files in directory with embeddings."""
+        from pathlib import Path
+        from .storage.file_browser import FileIndexer
+        
+        try:
+            # Determine target path
+            if path:
+                target_path = Path(path).expanduser().resolve()
+            else:
+                target_path = Path.home()
+            
+            if not target_path.is_dir():
+                self._show_notification(f"Not a directory: {target_path}", timeout=2000)
+                return
+            
+            # Show progress notification
+            self._show_notification(f"Indexing files in {target_path}...", timeout=2000)
+            
+            # Index files
+            indexer = FileIndexer()
+            count = indexer.index_directory(target_path, recursive=True, max_files=100)
+            
+            # Show completion
+            self._show_notification(f"Indexed {count} files", timeout=3000)
+            
+        except Exception as e:
+            error_msg = f"Failed to index directory: {e}"
+            self._show_notification(error_msg, timeout=3000)
+            print(error_msg)
+
+    def search_indexed_files(self, query: str):
+        """Search indexed files by semantic similarity."""
+        from .storage.file_browser import FileIndexer
+        from .rendering.html import render_template, create_data_url
+        
+        try:
+            indexer = FileIndexer()
+            results = indexer.search_files(query, n_results=10)
+            
+            if not results:
+                self._show_notification("No matching files found", timeout=2000)
+                return
+            
+            # Build HTML for results
+            results_html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>File Search Results</title>
+    <style>
+        body {{
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: #e0e0e0;
+            margin: 0;
+            padding: 20px;
+            min-height: 100vh;
+        }}
+        .container {{
+            max-width: 1200px;
+            margin: 0 auto;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            padding: 20px;
+            backdrop-filter: blur(10px);
+        }}
+        h1 {{ color: #4fc3f7; }}
+        .query {{
+            background: rgba(255, 255, 255, 0.1);
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }}
+        .result {{
+            background: rgba(255, 255, 255, 0.05);
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 10px;
+            transition: all 0.2s;
+        }}
+        .result:hover {{
+            background: rgba(255, 255, 255, 0.1);
+            transform: translateX(5px);
+        }}
+        .file-path {{
+            color: #81c784;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }}
+        .file-type {{
+            color: #9e9e9e;
+            font-size: 0.9em;
+        }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 File Search Results</h1>
+        <div class="query">
+            <strong>Query:</strong> {html.escape(query)}
+        </div>
+        <div class="results">
+"""
+            
+            for result in results:
+                file_path = result.get('path', 'Unknown')
+                file_name = result.get('name', 'Unknown')
+                file_type = result.get('type', 'unknown')
+                
+                results_html += f"""
+            <div class="result">
+                <div class="file-path">📄 {html.escape(file_name)}</div>
+                <div style="color: #b0b0b0; font-size: 0.85em;">{html.escape(file_path)}</div>
+                <div class="file-type">Type: {html.escape(file_type)}</div>
+            </div>
+"""
+            
+            results_html += """
+        </div>
+    </div>
+</body>
+</html>
+"""
+            
+            self.open_url(create_data_url(results_html))
+            
+        except Exception as e:
+            error_msg = f"Failed to search files: {e}"
+            self._show_notification(error_msg, timeout=3000)
+            print(error_msg)
+
     def update_title(self):
         self.setWindowTitle("Minimal Browser")
 
@@ -1738,6 +1935,22 @@ class VimBrowser(QMainWindow):
             <tr>
                 <td><span class="cmd">:ext</span></td>
                 <td>Open current page in external browser (shorthand)</td>
+            </tr>
+            <tr>
+                <td><span class="cmd">:files [path]</span></td>
+                <td>Browse local files and directories</td>
+            </tr>
+            <tr>
+                <td><span class="cmd">:fb [path]</span></td>
+                <td>File browser (shorthand)</td>
+            </tr>
+            <tr>
+                <td><span class="cmd">:index [path]</span></td>
+                <td>Index files with embeddings for search</td>
+            </tr>
+            <tr>
+                <td><span class="cmd">:search-files &lt;query&gt;</span></td>
+                <td>Search indexed files semantically</td>
             </tr>
         </table>
     </div>
