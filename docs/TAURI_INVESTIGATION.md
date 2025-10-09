@@ -666,6 +666,86 @@ Run Tauri prototype in parallel as a research project. If it demonstrates compel
 5. **Benchmark and document**: Compare performance, document findings
 6. **Team decision**: Review results, decide on further investment
 
+## 9. Overlay Companion Proof of Concept
+
+### 9.1 Objectives
+
+- Deliver a lightweight, Tauri-based overlay window that can coexist with the current PySide6 shell.
+- Validate IPC patterns that let the Qt core request dynamic web experiences (e.g., AI dashboards, collaborative apps) rendered by the overlay.
+- Prove that native Rust commands can expose C/Rust modules to the overlay without blocking the Qt event loop.
+
+**Primary use cases targeted:**
+- AI-powered floating command palette rendered independently from the main Qt scene.
+- Embedded web apps (e.g., documentation viewers, video overlays) that need rapid iteration without recompiling Qt UI.
+- Drop-in “panel” windows that can be toggled by the existing modal key system.
+
+### 9.2 Proposed Architecture
+
+```
+┌──────────────────────────────┐          ┌──────────────────────────────┐
+│   Qt Shell (PySide6)         │  IPC     │      Tauri Overlay (Rust)    │
+│ • Primary browser window     │◄────────►│ • System WebView (HTML/JS)   │
+│ • Vim modes / keybindings    │  (JSON)  │ • Tailwind/Vite frontend     │
+│ • AI dispatcher (Python)     │          │ • Native Rust commands       │
+└──────────────┬───────────────┘          └──────────────┬───────────────┘
+                    │                                              │
+      Python async bridge (uvicorn / websockets)      Rust module adapters
+                    │                                              │
+          Conversation & AI services                Native extensions (C/Rust)
+```
+
+**IPC channel options evaluated:**
+- **WebSocket bridge (recommended)**: low-latency, bi-directional events, maps to Qt’s async primitives.
+- Native pipe/UDS: fastest but platform-dependent and harder to debug.
+- HTTP/REST: simplest implementation, acceptable for PoC but adds overhead.
+
+### 9.3 Milestones
+
+1. **Scaffold overlay project**
+    - `cargo tauri init --app-name minimal-overlay`
+    - Configure Vite + TypeScript frontend with hot reload disabled in production.
+2. **Establish IPC bridge**
+    - Python side: provide `qt_ipc_bridge.py` (async WebSocket server using standard library `asyncio` + `websockets` optional fallback) to relay commands.
+    - Tauri side: wire `@tauri-apps/api/event` listeners that forward payloads to the frontend store.
+3. **Implement overlay behaviors**
+    - Create reusable overlay layout (glassmorphism CSS, keyboard shortcuts mirrored from Qt).
+    - Expose Tauri commands for native module calls (`overlay_eval_expression`, `fetch_doc_snippet`).
+4. **Qt orchestration glue**
+    - Add experimental engine flag (e.g., `--overlay-tauri`) that spawns the Tauri binary via `subprocess.Popen` and negotiates a WebSocket session.
+    - Provide Python shim to send `show_overlay`, `hide_overlay`, `load_url` messages.
+5. **Validation & metrics**
+    - Measure overlay launch time (<400ms target) and message round-trip (<25ms).
+    - Document compatibility matrix (Windows/macOS/Linux).
+
+### 9.4 Deliverables
+
+- `examples/tauri_overlay_poc/` directory containing:
+  - `README.md` with setup instructions, architecture diagram, and lifecycle notes.
+  - `overlay_bridge.py` reference implementation for the WebSocket bridge.
+  - Sample message contract JSON (serde + pydantic schemas).
+- Follow-up checklist to move from PoC → alpha:
+  - Harden IPC (reconnection, auth tokens).
+  - Persist overlay window state in shared config.
+  - Add automated smoke test that spawns both processes and verifies handshake.
+
+### 9.5 Risks & Mitigations
+
+| Risk | Notes | Mitigation |
+|------|-------|------------|
+| Tauri binary lifecycle conflicts | Ensuring overlay closes with Qt host | Wrap process in Qt `QProcess`; add heartbeat ping |
+| Frontend/Backend drift | Different teams changing JS/Rust/Python independently | Centralized schema definitions + CI contract tests |
+| IPC security | Overlay might expose privileged commands | Sign messages, enforce allowlists, disable devtools in production |
+| Packaging complexity | Bundling Tauri assets alongside PySide6 | Investigate embedding binary, or use installer that drops both packages |
+
+### 9.6 Success Criteria
+
+- Overlay window starts within 500ms of Qt trigger on macOS/Windows/Linux.
+- IPC latency stays below 30ms p95 for 1KB payloads.
+- No blocking impact on Qt UI thread while overlay is active.
+- Prototype demonstrates at least one interactive web app (AI dashboard) and one native Rust-backed command.
+
+Once these checkpoints are met, we can greenlight an “Overlay Alpha” track that formalizes APIs and contributor docs.
+
 ## Appendix A: Tauri Resources
 
 - [Tauri Official Documentation](https://tauri.app/v1/guides/)
