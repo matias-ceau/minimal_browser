@@ -8,6 +8,7 @@ Minimal Browser is a vim-inspired Qt WebEngine shell with a built-in AI copilot.
 
 - **Modal ergonomics:** NORMAL/COMMAND/INSERT modes with familiar vim keybindings.
 - **Native AI assistant:** Structured responses (navigate/search/html) parsed via Pydantic for deterministic actions.
+- **AI vision analysis:** Capture screenshots and analyze them with GPT-4o vision capabilities (Ctrl+Shift+S).
 - **Pluggable engines:** Abstract `WebEngine` contract with a Qt WebEngine implementation today and hooks for GTK/others tomorrow.
 - **Smart rendering:** AI HTML responses rendered via Jinja templates and injected as data URLs for instant previews.
 - **Conversation memory:** Rolling in-memory history plus optional JSON persistence for long-running sessions.

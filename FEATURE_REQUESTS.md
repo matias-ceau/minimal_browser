@@ -118,4 +118,5 @@ Legend: **Priority** = (High/Medium/Low), **Status** = (Idea ▢ / Planned ◧ /
 
 ### FR-063: AI Screenshot Analysis
 - **Summary:** Capture screenshots, feed vision-capable models, return annotations.
-- **Priority:** Medium · **Status:** ▢ Idea
+- **Priority:** Medium · **Status:** ◉ Shipped
+- **Implementation:** Ctrl+Shift+S captures screenshot and prompts for AI vision analysis using GPT-4o
