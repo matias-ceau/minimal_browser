@@ -31,6 +31,19 @@ _TEMPLATE_DIR = _discover_template_dir()
 _ENV = Environment(loader=FileSystemLoader(str(_TEMPLATE_DIR)))
 
 
+def _filesizeformat(bytes_value: int) -> str:
+    """Format file size in human-readable format."""
+    for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
+        if bytes_value < 1024.0:
+            return f"{bytes_value:.1f} {unit}"
+        bytes_value /= 1024.0
+    return f"{bytes_value:.1f} PB"
+
+
+# Add custom filters to Jinja2 environment
+_ENV.filters['filesizeformat'] = _filesizeformat
+
+
 def render_template(name: str, context: Dict[str, Any]) -> str:
     """Render a Jinja2 template with the provided context."""
 
