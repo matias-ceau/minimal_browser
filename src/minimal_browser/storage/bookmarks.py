@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Literal, Optional
@@ -48,18 +49,31 @@ class BookmarkStore:
 
     def _load(self) -> dict[str, Bookmark]:
         """Load bookmarks from disk."""
-        if self.path.exists():
-            data = read_json(self.path)
-            if isinstance(data, list):  # Support both list and dict formats
-                return {bm["id"]: Bookmark(**bm) for bm in data if isinstance(bm, dict)}
-            elif isinstance(data, dict):
-                return {k: Bookmark(**v) for k, v in data.items()}
+        if self.path.exists() and self.path.stat().st_size > 0:
+            try:
+                data = read_json(self.path)
+                if isinstance(data, list):  # Support both list and dict formats
+                    return {bm["id"]: Bookmark(**bm) for bm in data if isinstance(bm, dict)}
+                elif isinstance(data, dict):
+                    return {k: Bookmark(**v) for k, v in data.items()}
+            except (json.JSONDecodeError, ValueError):
+                # Handle corrupted or empty files
+                pass
         return {}
 
     def save(self) -> None:
         """Persist bookmarks to disk."""
         # Save as list for better JSON compatibility
-        bookmark_list = [bm.model_dump(mode="python") for bm in self._bookmarks.values()]
+        bookmark_list = []
+        for bm in self._bookmarks.values():
+            # Convert to dict with proper serialization
+            bm_dict = bm.model_dump(mode="python")
+            # Convert datetime objects to ISO format strings
+            if isinstance(bm_dict.get("created_at"), datetime):
+                bm_dict["created_at"] = bm_dict["created_at"].isoformat()
+            if isinstance(bm_dict.get("updated_at"), datetime):
+                bm_dict["updated_at"] = bm_dict["updated_at"].isoformat()
+            bookmark_list.append(bm_dict)
         write_json(self.path, bookmark_list)
 
     def add(self, bookmark: Bookmark) -> None:
