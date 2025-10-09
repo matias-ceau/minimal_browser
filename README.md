@@ -11,6 +11,7 @@ Minimal Browser is a vim-inspired Qt WebEngine shell with a built-in AI copilot.
 - **Pluggable engines:** Abstract `WebEngine` contract with a Qt WebEngine implementation today and hooks for GTK/others tomorrow.
 - **Smart rendering:** AI HTML responses rendered via Jinja templates and injected as data URLs for instant previews.
 - **Conversation memory:** Rolling in-memory history plus optional JSON persistence for long-running sessions.
+- **File browser with embeddings:** Browse local files, index with semantic search, and find code/assets using natural language queries.
 
 ## 🧱 Project Layout
 
@@ -19,8 +20,8 @@ src/minimal_browser/
 ├── ai/                # AI models, schemas, structured agent, parsing logic
 ├── rendering/         # HTML templating + URL/data-URL builders
 ├── engines/           # Web engine abstractions and the Qt implementation
-├── storage/           # Conversation logging utilities
-├── templates/         # HTML templates (AI response card, help screen)
+├── storage/           # Conversation logging, file browser, embeddings
+├── templates/         # HTML templates (AI response, help, file browser)
 ├── minimal_browser.py # VimBrowser UI, command palette, AI worker wiring
 └── main.py            # Entry point + environment setup
 ```
@@ -88,6 +89,50 @@ uv run python -m minimal_browser
 ```
 
 The keychain integration is optional - if `keyring` is not available or fails, the browser will fall back to environment variables only.
+
+## 📁 File Browser with Embeddings
+
+Minimal Browser includes a built-in file browser with semantic search capabilities powered by ChromaDB embeddings.
+
+![File Browser UI](https://github.com/user-attachments/assets/267b62a0-d48b-4415-b04d-707ef965e9eb)
+
+### Commands
+
+- **`:files [path]`** or **`:fb [path]`** - Browse local directories
+  - Without path: Opens home directory
+  - With path: Opens specified directory (supports `~` expansion)
+  
+- **`:index [path]`** - Index files with embeddings for semantic search
+  - Recursively indexes up to 100 text-based files
+  - Supports: `.py`, `.js`, `.md`, `.txt`, `.json`, `.xml`, etc.
+  - Shows progress and completion notifications
+
+- **`:search-files <query>`** - Search indexed files semantically
+  - Natural language queries: "database connection logic", "error handling"
+  - Returns top 10 matches with file paths and types
+
+### Features
+
+- **Visual file browser**: Modern UI with file type icons, sizes, and MIME types
+- **Smart navigation**: Click directories to browse, use parent/home shortcuts
+- **Semantic indexing**: ChromaDB-powered embedding search for code and documents
+- **Hidden file filtering**: Automatically skips dot files and system files
+- **Permission handling**: Gracefully handles inaccessible files and directories
+
+### Example Workflow
+
+```bash
+# Browse your project
+:files ~/my-project
+
+# Index the codebase
+:index ~/my-project
+
+# Search for specific functionality
+:search-files authentication middleware
+```
+
+For detailed documentation, see [`FILE_BROWSER_DOCS.md`](FILE_BROWSER_DOCS.md).
 
 ## 🧭 Current Status & Known Gaps
 

@@ -98,7 +98,7 @@ Legend: **Priority** = (High/Medium/Low), **Status** = (Idea ▢ / Planned ◧ /
 
 ### FR-053: File Browser with Embeddings
 - **Summary:** Browse local files, index with embeddings, and surface in AI prompts.
-- **Priority:** Low · **Status:** ▢ Idea
+- **Priority:** Low · **Status:** ◉ Shipped
 
 ---
 
