@@ -33,6 +33,7 @@ class AIConfig(BaseModel):
 class StorageConfig(BaseModel):
     conversation_log: Path = Field(default=CONFIG_DIR / "conversations.json")
     vector_db_path: Path = Field(default=CONFIG_DIR / "vector_db")
+    bookmarks_path: Path = Field(default=CONFIG_DIR / "bookmarks.json")
 
 
 class SecurityConfig(BaseModel):

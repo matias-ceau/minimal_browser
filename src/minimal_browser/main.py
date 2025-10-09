@@ -25,6 +25,8 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 from .minimal_browser import VimBrowser
 from .storage.conversations import ConversationLog
+from .storage.bookmarks import BookmarkStore
+from .config.default_config import load_config
 
 
 def main():
@@ -51,10 +53,14 @@ def main():
         print(f"WebEngine settings warning: {e}")
 
     # Create and show browser
+    config = load_config()
     conversation_log = ConversationLog(
-        path=str(Path.home() / ".minimal_browser" / "conversations.json")
+        path=str(config.storage.conversation_log)
     )
-    browser = VimBrowser(conversation_log=conversation_log)
+    bookmark_store = BookmarkStore(
+        path=str(config.storage.bookmarks_path)
+    )
+    browser = VimBrowser(conversation_log=conversation_log, bookmark_store=bookmark_store)
     browser.show()
 
     sys.exit(app.exec())
