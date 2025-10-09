@@ -15,6 +15,7 @@ from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QMainWindow,
     QVBoxLayout,
+    QHBoxLayout,
     QWidget,
     QLabel,
     QLineEdit,
@@ -48,6 +49,126 @@ def to_data_url(html: str) -> str:
 
 
 OS_ENV: MutableMapping[str, str] = cast(MutableMapping[str, str], os.environ)  # type: ignore[attr-defined]
+
+
+COMMAND_PROMPT_STYLES: dict[str, dict[str, str]] = {
+    ":": {
+        "icon": "⌨️",
+        "label": "Command Mode",
+        "placeholder": "Run a Vim command (e.g. :help)",
+    },
+    "/": {
+        "icon": "🔍",
+        "label": "Find in Page",
+        "placeholder": "Search the current page",
+    },
+    "o ": {
+        "icon": "🌐",
+        "label": "Open URL",
+        "placeholder": "Enter a URL to visit",
+    },
+    "s ": {
+        "icon": "🧭",
+        "label": "Smart Search",
+        "placeholder": "Search the web with context",
+    },
+    "a ": {
+        "icon": "🤖",
+        "label": "AI Search",
+        "placeholder": "Ask the AI to find information",
+    },
+    "🤖 ": {
+        "icon": "💬",
+        "label": "AI Chat",
+        "placeholder": "Chat with the AI assistant",
+    },
+}
+
+
+class CommandPalette(QWidget):
+    """Lightweight command palette widget with icon + input"""
+
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("CommandPalette")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 16, 20, 16)
+        layout.setSpacing(10)
+
+        header = QHBoxLayout()
+        header.setContentsMargins(0, 0, 0, 0)
+        header.setSpacing(8)
+
+        self.icon_label = QLabel("⌨️")
+        self.icon_label.setObjectName("CommandIcon")
+        self.icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.icon_label.setFixedWidth(28)
+
+        self.mode_label = QLabel("Command Mode")
+        self.mode_label.setObjectName("CommandLabel")
+
+        header.addWidget(self.icon_label)
+        header.addWidget(self.mode_label)
+        header.addStretch()
+
+        self.input = QLineEdit()
+        self.input.setObjectName("CommandInput")
+        self.input.setClearButtonEnabled(True)
+        self.input.setPlaceholderText("Run a Vim command (e.g. :help)")
+
+        layout.addLayout(header)
+        layout.addWidget(self.input)
+
+        self.setStyleSheet(
+            """
+            #CommandPalette {
+                background-color: rgba(20, 20, 20, 220);
+                border-radius: 12px;
+                border: 1px solid rgba(255, 255, 255, 0.12);
+            }
+            #CommandLabel {
+                color: rgba(255, 255, 255, 0.8);
+                font-size: 12px;
+                font-weight: 600;
+                letter-spacing: 1.1px;
+                text-transform: uppercase;
+            }
+            #CommandIcon {
+                font-size: 18px;
+            }
+            #CommandInput {
+                background-color: rgba(255, 255, 255, 0.07);
+                border: 1px solid rgba(255, 255, 255, 0.12);
+                border-radius: 10px;
+                color: #ffffff;
+                font-size: 14px;
+                padding: 10px 14px;
+                selection-background-color: rgba(118, 75, 162, 0.6);
+            }
+            #CommandInput:focus {
+                border: 1px solid rgba(134, 84, 204, 0.8);
+                background-color: rgba(255, 255, 255, 0.12);
+            }
+            """
+        )
+
+        self.setFocusProxy(self.input)
+
+    def configure(self, prefix: str) -> None:
+        style = COMMAND_PROMPT_STYLES.get(prefix)
+        if style is None:
+            style = {
+                "icon": "⌨️",
+                "label": "Command Mode",
+                "placeholder": "Type a command",
+            }
+        self.icon_label.setText(style["icon"])
+        self.mode_label.setText(style["label"])
+        self.input.setPlaceholderText(style["placeholder"])
+        self.input.clear()
+
 
 
 class AIWorker(QThread):
@@ -501,6 +622,7 @@ class VimBrowser(QMainWindow):
         OS_ENV.setdefault("WLR_NO_HARDWARE_CURSORS", "1")
         self.mode = "NORMAL"
         self.command_buffer = ""
+        self.active_command_prefix: Optional[str] = None
         self.buffers: list[str] = []
         self.current_buffer = 0
         self.ai_worker: Optional[AIWorker] = None
@@ -621,12 +743,21 @@ class VimBrowser(QMainWindow):
 
 
     def _init_command_line(self):
-        self.command_line = QLineEdit(self)
-        self.command_line.setStyleSheet(
-            "QLineEdit { background-color: rgba(30,30,30,240); color: #fff; }"
-        )
-        self.command_line.hide()
+        self.command_palette = CommandPalette(self)
+        self.command_line = self.command_palette.input
+        self.command_palette.hide()
         self.command_line.returnPressed.connect(self.execute_command)
+
+    def _position_command_palette(self) -> None:
+        if not hasattr(self, "command_palette"):
+            return
+        width = min(480, self.width() - 60)
+        width = max(width, 300)
+        height = self.command_palette.sizeHint().height()
+        self.command_palette.resize(width, height)
+        x = (self.width() - width) // 2
+        y = self.height() - height - 60
+        self.command_palette.move(max(20, x), max(40, y))
 
     def _init_mode_timer(self):
         self.mode_timer = QTimer()
@@ -849,16 +980,18 @@ class VimBrowser(QMainWindow):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        if hasattr(self, "command_line"):
-            width = min(400, self.width() - 40)
-            self.command_line.resize(width, 30)
-            self.command_line.move((self.width() - width) // 2, self.height() - 50)
+        if hasattr(self, "command_palette"):
+            self._position_command_palette()
         if hasattr(self, "loading_overlay"):
             self.loading_overlay.resize(self.size())
 
     def normal_mode(self):
         self.mode = "NORMAL"
-        self.command_line.hide()
+        if hasattr(self, "command_palette"):
+            self.command_palette.hide()
+        if hasattr(self, "command_line"):
+            self.command_line.clear()
+        self.active_command_prefix = None
         self.update_title()
         self.setFocus()
 
@@ -896,7 +1029,7 @@ class VimBrowser(QMainWindow):
     def ai_chat_mode(self):
         if self.mode == "NORMAL":
             self.mode = "AI_CHAT"
-            self.show_command_line("研究员 ")
+            self.show_command_line("🤖 ")
 
     def show_help(self):
         if self.mode == "NORMAL":
@@ -907,15 +1040,30 @@ class VimBrowser(QMainWindow):
             help_url = f"data:text/html;base64,{encoded_html}"
             self.open_url(help_url)
 
-    def show_command_line(self, prefix):
-        self.command_line.clear()
-        self.command_line.setText(prefix)
-        self.command_line.show()
-        self.command_line.setFocus()
+    def show_command_line(self, prefix: str) -> None:
+        self.active_command_prefix = prefix
+        if hasattr(self, "command_palette"):
+            self.command_palette.configure(prefix)
+            self.command_palette.show()
+            self.command_palette.raise_()
+            self._position_command_palette()
+        if hasattr(self, "command_line"):
+            self.command_line.setFocus()
         self.update_title()
 
-    def execute_command(self):
-        command = self.command_line.text()
+    def execute_command(self) -> None:
+        raw_text = self.command_line.text()
+        prefix = self.active_command_prefix or ""
+        content = raw_text.strip()
+
+        if prefix:
+            command = prefix + content
+        else:
+            command = raw_text.strip()
+
+        if not command:
+            self.normal_mode()
+            return
 
         if command.startswith(":"):
             self.execute_vim_command(command[1:])
