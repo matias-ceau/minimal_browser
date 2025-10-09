@@ -1,19 +1,31 @@
 """AI model configurations and providers"""
 
-from dataclasses import dataclass
-from typing import List, Optional
+from typing import Annotated, List, Literal, Optional
+
+from pydantic import BaseModel, Field, field_validator
 
 
-@dataclass
-class AIModel:
-    """AI model configuration"""
+class AIModel(BaseModel):
+    """AI model configuration with type validation."""
 
-    name: str
-    provider: str
-    max_tokens: int
-    supports_streaming: bool
-    cost_per_token: float = 0.0
-    model_id: Optional[str] = None
+    name: Annotated[str, Field(min_length=1, description="Model name identifier")]
+    provider: Annotated[
+        str, Field(min_length=1, description="AI provider (e.g., openrouter, openai)")
+    ]
+    max_tokens: Annotated[int, Field(gt=0, description="Maximum token limit")]
+    supports_streaming: bool = Field(
+        description="Whether the model supports streaming responses"
+    )
+    cost_per_token: Annotated[float, Field(ge=0.0)] = 0.0
+    model_id: Optional[str] = Field(
+        default=None, description="Provider-specific model identifier"
+    )
+
+    @field_validator("provider")
+    @classmethod
+    def validate_provider(cls, v: str) -> str:
+        """Ensure provider name is lowercase for consistency."""
+        return v.lower()
 
     def resolved_model_id(self) -> str:
         """Return the provider-aware model identifier for API usage."""
@@ -62,10 +74,20 @@ DEFAULT_MODEL = "gpt-5-codex-preview"
 
 
 def get_model(name: str) -> Optional[AIModel]:
-    """Get model configuration by name"""
+    """Get model configuration by name with validation."""
     return MODELS.get(name)
 
 
 def list_models() -> List[str]:
     """List available model names"""
     return list(MODELS.keys())
+
+
+def validate_model_config(name: str) -> bool:
+    """Validate that a model configuration exists and is properly formed."""
+    model = get_model(name)
+    if model is None:
+        return False
+    # Pydantic validation happens automatically during model creation
+    return True
+
