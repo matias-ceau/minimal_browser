@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Annotated, Literal, Union
+from typing import Annotated, Literal, Optional, Union
 
 from pydantic import BaseModel, Field, HttpUrl, StringConstraints
 
@@ -29,8 +29,18 @@ class HtmlAction(BaseModel):
     html: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 
 
+class BookmarkAction(BaseModel):
+    """Represents a request to add or manage a bookmark."""
+
+    type: Literal["bookmark"] = "bookmark"
+    title: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+    url: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+    tags: list[str] = Field(default_factory=list)
+    content: Optional[str] = None
+
+
 AIAction = Annotated[
-    Union[NavigateAction, SearchAction, HtmlAction],
+    Union[NavigateAction, SearchAction, HtmlAction, BookmarkAction],
     Field(discriminator="type"),
 ]
 """Discriminated union encapsulating the possible AI actions."""
