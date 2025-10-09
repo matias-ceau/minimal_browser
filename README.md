@@ -2,7 +2,8 @@
 
 Minimal Browser is a vim-inspired Qt WebEngine shell with a built-in AI copilot. It combines modal keyboard navigation, a lightweight UI, and structured AI actions so you can browse, generate content, or perform smart searches without leaving a terminal-style workflow.
 
-> 📄 Looking for a deeper architectural dive? See [`ARCHITECTURE.md`](ARCHITECTURE.md).
+> 📄 Looking for a deeper architectural dive? See [`ARCHITECTURE.md`](ARCHITECTURE.md).  
+> 🔬 Interested in performance optimization and Tauri integration? See [`INVESTIGATION_TAURI_ENGINE.md`](INVESTIGATION_TAURI_ENGINE.md).
 
 ## ✨ Highlights
 

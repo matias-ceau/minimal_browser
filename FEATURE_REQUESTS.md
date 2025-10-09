@@ -106,7 +106,8 @@ Legend: **Priority** = (High/Medium/Low), **Status** = (Idea ▢ / Planned ◧ /
 
 ### FR-060: Native Performance Modules
 - **Summary:** Profile hotspots and trial Rust/C++ modules for CPU/GPU-heavy tasks.
-- **Priority:** Low · **Status:** ▢ Idea
+- **Priority:** Medium · **Status:** ◧ Planned
+- **Investigation:** See [INVESTIGATION_TAURI_ENGINE.md](./INVESTIGATION_TAURI_ENGINE.md) for detailed analysis of limiting factors and Tauri integration feasibility. Recommendation: Phased optimization approach using PyO3 for selective hotspots rather than full Tauri migration.
 
 ### FR-061: Persistent Login Cookies
 - **Summary:** Enable long-lived sessions with secure cookie storage.
