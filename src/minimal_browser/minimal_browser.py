@@ -51,6 +51,328 @@ def to_data_url(html: str) -> str:
 
 OS_ENV: MutableMapping[str, str] = cast(MutableMapping[str, str], os.environ)  # type: ignore[attr-defined]
 
+
+COMMAND_PROMPT_STYLES: dict[str, dict[str, str]] = {
+    ":": {
+        "icon": "⌨️",
+        "label": "Command Mode",
+        "placeholder": "Run a Vim command (e.g. :help)",
+        "bg_color": "rgba(30, 30, 50, 220)",
+        "border_color": "rgba(100, 100, 180, 0.3)",
+    },
+    "/": {
+        "icon": "🔍",
+        "label": "Find in Page",
+        "placeholder": "Search the current page",
+        "bg_color": "rgba(30, 50, 30, 220)",
+        "border_color": "rgba(100, 180, 100, 0.3)",
+    },
+    "o ": {
+        "icon": "🌐",
+        "label": "Open URL",
+        "placeholder": "Enter a URL to visit",
+        "bg_color": "rgba(20, 30, 40, 220)",
+        "border_color": "rgba(80, 120, 180, 0.3)",
+    },
+    "s ": {
+        "icon": "🧭",
+        "label": "Smart Search",
+        "placeholder": "Search the web with context",
+        "bg_color": "rgba(40, 30, 20, 220)",
+        "border_color": "rgba(180, 140, 100, 0.3)",
+    },
+    "a ": {
+        "icon": "🤖",
+        "label": "AI Search",
+        "placeholder": "Ask the AI to find information",
+        "bg_color": "rgba(50, 20, 50, 220)",
+        "border_color": "rgba(180, 100, 180, 0.3)",
+    },
+    "🤖 ": {
+        "icon": "💬",
+        "label": "AI Chat",
+        "placeholder": "Chat with the AI assistant",
+        "bg_color": "rgba(40, 20, 40, 220)",
+        "border_color": "rgba(160, 80, 160, 0.3)",
+    },
+    "📷 ": {
+        "icon": "📸",
+        "label": "Screenshot Analysis",
+        "placeholder": "Ask a question about the screenshot",
+        "bg_color": "rgba(30, 40, 50, 220)",
+        "border_color": "rgba(100, 140, 180, 0.3)",
+    },
+}
+
+# Ordered list of command prompt modes for cycling
+COMMAND_PROMPT_ORDER = [":", "/", "o ", "s ", "a "]
+
+
+class CommandPalette(QWidget):
+    """Lightweight command palette widget with icon + input"""
+
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("CommandPalette")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 16, 20, 16)
+        layout.setSpacing(10)
+
+        header = QHBoxLayout()
+        header.setContentsMargins(0, 0, 0, 0)
+        header.setSpacing(8)
+
+        self.icon_label = QLabel("⌨️")
+        self.icon_label.setObjectName("CommandIcon")
+        self.icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.icon_label.setFixedWidth(28)
+
+        self.mode_label = QLabel("Command Mode")
+        self.mode_label.setObjectName("CommandLabel")
+
+        header.addWidget(self.icon_label)
+        header.addWidget(self.mode_label)
+        header.addStretch()
+
+        self.input = QLineEdit()
+        self.input.setObjectName("CommandInput")
+        self.input.setClearButtonEnabled(True)
+        self.input.setPlaceholderText("Run a Vim command (e.g. :help)")
+
+        layout.addLayout(header)
+        layout.addWidget(self.input)
+
+        self.setStyleSheet(
+            """
+            #CommandPalette {
+                background-color: rgba(20, 20, 20, 220);
+                border-radius: 12px;
+                border: 1px solid rgba(255, 255, 255, 0.12);
+            }
+            #CommandLabel {
+                color: rgba(255, 255, 255, 0.8);
+                font-size: 12px;
+                font-weight: 600;
+                letter-spacing: 1.1px;
+                text-transform: uppercase;
+            }
+            #CommandIcon {
+                font-size: 18px;
+            }
+            #CommandInput {
+                background-color: rgba(255, 255, 255, 0.07);
+                border: 1px solid rgba(255, 255, 255, 0.12);
+                border-radius: 10px;
+                color: #ffffff;
+                font-size: 14px;
+                padding: 10px 14px;
+                selection-background-color: rgba(118, 75, 162, 0.6);
+            }
+            #CommandInput:focus {
+                border: 1px solid rgba(134, 84, 204, 0.8);
+                background-color: rgba(255, 255, 255, 0.12);
+            }
+            """
+        )
+
+        self.setFocusProxy(self.input)
+
+    def configure(self, prefix: str) -> None:
+        style = COMMAND_PROMPT_STYLES.get(prefix)
+        if style is None:
+            style = {
+                "icon": "⌨️",
+                "label": "Command Mode",
+                "placeholder": "Type a command",
+                "bg_color": "rgba(20, 20, 20, 220)",
+                "border_color": "rgba(255, 255, 255, 0.12)",
+            }
+        self.icon_label.setText(style["icon"])
+        self.mode_label.setText(style["label"])
+        self.input.setPlaceholderText(style["placeholder"])
+        self.input.clear()
+        
+        # Update dynamic colors
+        bg_color = style.get("bg_color", "rgba(20, 20, 20, 220)")
+        border_color = style.get("border_color", "rgba(255, 255, 255, 0.12)")
+        
+        self.setStyleSheet(
+            f"""
+            #CommandPalette {{
+                background-color: {bg_color};
+                border-radius: 12px;
+                border: 1px solid {border_color};
+            }}
+            #CommandLabel {{
+                color: rgba(255, 255, 255, 0.8);
+                font-size: 12px;
+                font-weight: 600;
+                letter-spacing: 1.1px;
+                text-transform: uppercase;
+            }}
+            #CommandIcon {{
+                font-size: 18px;
+            }}
+            #CommandInput {{
+                background-color: rgba(255, 255, 255, 0.07);
+                border: 1px solid rgba(255, 255, 255, 0.12);
+                border-radius: 10px;
+                color: #ffffff;
+                font-size: 14px;
+                padding: 10px 14px;
+                selection-background-color: rgba(118, 75, 162, 0.6);
+            }}
+            #CommandInput:focus {{
+                border: 1px solid rgba(134, 84, 204, 0.8);
+                background-color: rgba(255, 255, 255, 0.12);
+            }}
+            """
+        )
+
+
+class AIWorker(QThread):
+    """Worker thread for AI API calls with streaming support"""
+
+    response_ready = pyqtSignal(str, str)  # response_type, content
+    progress_update = pyqtSignal(str)  # progress message
+    streaming_chunk = pyqtSignal(str)  # streaming response chunk
+
+    def __init__(
+        self,
+        query: str,
+        current_url: str = "",
+        history: Optional[list[dict[str, str]]] = None,
+        screenshot_data: Optional[bytes] = None,
+    ):
+        super().__init__()
+        self.query = query
+        self.current_url = current_url
+        self.history = list(history or [])
+        self.screenshot_data = screenshot_data
+
+    def run(self):
+        try:
+            print(f"AI Worker starting for query: {self.query}")
+            if self.screenshot_data:
+                print(f"Screenshot included: {len(self.screenshot_data)} bytes")
+            self.progress_update.emit("Analyzing request...")
+
+            response = self.get_ai_response(self.query, self.current_url)
+            print(f"AI Worker got response: {response[:100]}...")
+
+            self.response_ready.emit("success", response)
+        except Exception as e:
+            print(f"AI Worker error: {e}")
+            self.response_ready.emit("error", str(e))
+
+    def get_ai_response(self, query: str, current_url: str) -> str:
+        """Get a structured AI response using pydantic-ai."""
+        # For screenshot queries, use a direct API call instead of structured agent
+        if self.screenshot_data:
+            return self._get_vision_response(query, current_url)
+        
+        system_prompt = get_browser_assistant_prompt(current_url)
+        agent = StructuredBrowserAgent(
+            system_prompt=system_prompt,
+            history=self.history,
+        )
+
+        self.progress_update.emit("Requesting structured action…")
+        try:
+            action = agent.run(query)
+        except StructuredAIError as exc:
+            raise Exception(str(exc)) from exc
+        except requests.exceptions.RequestException as exc:
+            raise Exception(f"API request failed: {exc}") from exc
+        except Exception as exc:  # pragma: no cover - defensive fallback
+            raise Exception(f"AI processing failed: {exc}") from exc
+
+        action_type, payload = ResponseProcessor.action_to_tuple(action)
+
+        prefix_map = {
+            "navigate": "NAVIGATE:",
+            "search": "SEARCH:",
+            "html": "HTML:",
+        }
+        prefix = prefix_map.get(action_type, "HTML:")
+
+        summary = f"{action.type.upper()}: {payload[:160]}"
+        self.streaming_chunk.emit(summary)
+
+        return f"{prefix}{payload}"
+    
+    def _get_vision_response(self, query: str, current_url: str) -> str:
+        """Get an AI response with vision capabilities for screenshot analysis."""
+        import base64
+        from .ai.auth import auth_manager
+        
+        # Encode screenshot as base64
+        screenshot_base64 = base64.b64encode(self.screenshot_data).decode('utf-8')
+        
+        self.progress_update.emit("Analyzing screenshot with vision model…")
+        
+        # Use OpenRouter with a vision-capable model
+        api_key = auth_manager.get_key("openrouter")
+        if not api_key:
+            raise Exception("OpenRouter API key not found")
+        
+        # Build the messages with image
+        system_prompt = f"You are analyzing a screenshot of a webpage. The page URL is: {current_url or 'unknown'}"
+        
+        messages = [
+            {"role": "system", "content": system_prompt},
+        ]
+        
+        # Add conversation history if available
+        for msg in self.history[-5:]:  # Last 5 messages for context
+            messages.append(msg)
+        
+        # Add the user query with image
+        messages.append({
+            "role": "user",
+            "content": [
+                {
+                    "type": "text",
+                    "text": query
+                },
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/png;base64,{screenshot_base64}"
+                    }
+                }
+            ]
+        })
+        
+        # Call OpenRouter API with a vision model
+        api_url = "https://openrouter.ai/api/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        }
+        
+        # Use GPT-4 Vision or Claude 3.5 Sonnet (both support vision)
+        data = {
+            "model": "openai/gpt-4o",  # GPT-4o has vision capabilities
+            "messages": messages,
+            "max_tokens": 2000,
+        }
+        
+        response = requests.post(api_url, headers=headers, json=data)
+        response.raise_for_status()
+        
+        result = response.json()
+        content = result.get("choices", [{}])[0].get("message", {}).get("content", "")
+        
+        if not content:
+            raise Exception("No response from vision model")
+        
+        self.streaming_chunk.emit(f"ANALYSIS: {content[:160]}")
+        
+        # Return as HTML content
+        return f"HTML:{content}"
 # Load UI configuration
 COMMAND_PROMPT_STYLES = DEFAULT_CONFIG.ui.command_prompt_styles
 COMMAND_PROMPT_ORDER = DEFAULT_CONFIG.ui.command_prompt_order
@@ -94,6 +416,9 @@ class VimBrowser(QMainWindow):
         # URL history for 'o' prompt suggestions
         self.url_history: list[str] = []
         self.url_history_max = 50  # Keep last 50 URLs
+        
+        # Screenshot analysis state
+        self._pending_screenshot: Optional[bytes] = None
         
         self._init_ai_overlay()
         self._init_profile_and_browser()
@@ -419,6 +744,50 @@ class VimBrowser(QMainWindow):
         self.loading_overlay.raise_()
 
         worker.start()
+    
+    def _start_screenshot_analysis(self, query: str) -> None:
+        """Start AI analysis of the captured screenshot."""
+        query = query.strip()
+        if not query:
+            self._show_notification("Screenshot analysis requires a question", timeout=2500)
+            return
+        
+        if not hasattr(self, "_pending_screenshot") or not self._pending_screenshot:
+            self._show_notification("No screenshot available", timeout=2500)
+            return
+
+        if self.ai_worker and self.ai_worker.isRunning():
+            self._show_notification("AI is already processing a request", timeout=2500)
+            return
+
+        current_url = self._current_url()
+        history = self.conv_memory.as_history()
+        
+        # Create worker with screenshot data
+        worker = AIWorker(
+            query, 
+            current_url=current_url, 
+            history=history,
+            screenshot_data=self._pending_screenshot
+        )
+        worker.response_ready.connect(self._on_ai_response_ready)
+        worker.progress_update.connect(self._on_ai_progress_update)
+        worker.streaming_chunk.connect(self._on_ai_stream_chunk)
+
+        self.ai_worker = worker
+        self.last_query = f"[Screenshot Analysis] {query}"
+        self.current_ai_mode = "screenshot"
+        self.ai_stream_buffer = ""
+
+        self.conv_memory.add_user(f"[Screenshot] {query}")
+        self.loading_overlay.setText("📷 Analyzing screenshot...")
+        self.loading_overlay.show()
+        self.loading_overlay.raise_()
+
+        # Clear the pending screenshot
+        self._pending_screenshot = None
+
+        worker.start()
 
     def _on_ai_progress_update(self, message: str) -> None:
         if not message:
@@ -514,6 +883,9 @@ class VimBrowser(QMainWindow):
         # External browser integration
         QShortcut(QKeySequence("Ctrl+Shift+O"), self, self.open_in_external_browser)  # Open in external browser
         QShortcut(QKeySequence("e"), self, self.open_in_external_browser)  # Quick external browser
+        
+        # Screenshot analysis
+        QShortcut(QKeySequence("Ctrl+Shift+S"), self, self.screenshot_analysis_mode)  # Screenshot + AI analysis
 
     def keyPressEvent(self, event):
         if self.mode == "NORMAL":
@@ -655,6 +1027,53 @@ class VimBrowser(QMainWindow):
             self.mode = "AI_CHAT"
             self.show_command_line("🤖 ")
 
+    def screenshot_analysis_mode(self):
+        """Capture screenshot and prompt user for question about it."""
+        if self.mode != "NORMAL":
+            return
+        
+        self._show_notification("Capturing screenshot...", timeout=2000)
+        
+        # Capture screenshot asynchronously
+        if hasattr(self, "browser") and self.browser:
+            def on_screenshot_captured(image_bytes: bytes):
+                if not image_bytes:
+                    self._show_notification("Screenshot capture failed", timeout=2500)
+                    return
+                
+                # Store screenshot data for the AI worker
+                self._pending_screenshot = image_bytes
+                
+                # Show command palette for user to ask a question
+                self.mode = "SCREENSHOT_ANALYSIS"
+                self.show_command_line("📷 ")
+                self._show_notification("Screenshot captured! Ask a question about it.", timeout=2500)
+            
+            # Use Qt WebEngineView's grab method
+            try:
+                pixmap = self.browser.grab()
+                from PySide6.QtCore import QBuffer, QIODevice
+                from PySide6.QtGui import QImage
+                
+                # Convert pixmap to QImage
+                image = pixmap.toImage()
+                
+                # Convert to PNG bytes
+                buffer = QBuffer()
+                buffer.open(QIODevice.OpenModeFlag.WriteOnly)
+                image.save(buffer, "PNG")
+                
+                # Get the bytes
+                image_bytes = buffer.data().data()
+                buffer.close()
+                
+                on_screenshot_captured(image_bytes)
+            except Exception as e:
+                print(f"Error capturing screenshot: {e}")
+                self._show_notification("Screenshot capture failed", timeout=2500)
+        else:
+            self._show_notification("Browser not available", timeout=2500)
+
     def show_help(self):
         if self.mode == "NORMAL":
             help_content = self.get_help_content()
@@ -703,6 +1122,14 @@ class VimBrowser(QMainWindow):
             query = command[2:]
             print(f"Executing AI chat with query: '{query}'")
             self.ai_chat(query)
+        elif command.startswith("📷 "):
+            query = command[3:].strip()
+            if query:
+                print(f"Executing screenshot analysis with query: '{query}'")
+                self._start_screenshot_analysis(query)
+            else:
+                self._show_notification("Please provide a question about the screenshot", timeout=2500)
+                self.normal_mode()
 
         self.normal_mode()
 
