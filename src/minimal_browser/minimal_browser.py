@@ -6,20 +6,14 @@ import sys
 import html
 import base64
 import webbrowser
+import uuid
 import requests  # type: ignore[import-untyped]
 from typing import MutableMapping, Optional, cast
 
 
-from PySide6.QtCore import QUrl, Qt, QTimer, QThread, Signal as pyqtSignal, QEvent
+from PySide6.QtCore import QUrl, Qt, QTimer, QEvent
 from PySide6.QtGui import QKeySequence, QShortcut
-from PySide6.QtWidgets import (
-    QMainWindow,
-    QVBoxLayout,
-    QHBoxLayout,
-    QWidget,
-    QLabel,
-    QLineEdit,
-)
+from PySide6.QtWidgets import QMainWindow, QWidget
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWebEngineCore import (
     QWebEngineProfile,
@@ -29,11 +23,15 @@ from PySide6.QtWebEngineCore import (
 
 from .engines.qt_engine import QtWebEngine
 from .ai.schemas import AIAction, ConversationMemory
-from .ai.prompts import get_browser_assistant_prompt
-from .ai.structured import StructuredBrowserAgent, StructuredAIError
 from .ai.tools import ResponseProcessor
 from .rendering.artifacts import URLBuilder
+from .rendering.html import render_template, create_data_url
 from .storage.conversations import ConversationLog
+from .export.exporter import PageExporter
+from .templates import get_help_content
+from .config.default_config import DEFAULT_CONFIG
+from .ui import CommandPalette, AIWorker
+from .storage.bookmarks import BookmarkStore, Bookmark
 
 
 def to_data_url(html: str) -> str:
@@ -375,10 +373,13 @@ class AIWorker(QThread):
         
         # Return as HTML content
         return f"HTML:{content}"
+# Load UI configuration
+COMMAND_PROMPT_STYLES = DEFAULT_CONFIG.ui.command_prompt_styles
+COMMAND_PROMPT_ORDER = DEFAULT_CONFIG.ui.command_prompt_order
 
 
 class VimBrowser(QMainWindow):
-    def __init__(self, conversation_log: ConversationLog, headless: bool = False):
+    def __init__(self, conversation_log: ConversationLog, bookmark_store=None, headless: bool = False):
         super().__init__()
         # Fix for Python 3.13 compatibility and Wayland envs
         OS_ENV.setdefault("QT_API", "pyside6")
@@ -396,6 +397,7 @@ class VimBrowser(QMainWindow):
         self.current_ai_mode: str = "chat"
         self.ai_stream_buffer: str = ""
         self.conversation_log = conversation_log
+        self.bookmark_store = bookmark_store
         self.conv_memory: ConversationMemory = ConversationMemory()
         self.engine = QtWebEngine() if not headless else None
         self._dev_tools_window: Optional[QWebEngineView] = None
@@ -406,6 +408,7 @@ class VimBrowser(QMainWindow):
             "q", "quit", "w", "write", "wq", "help", "h",
             "e ", "b", "bd", "bn", "bp",
             "browser", "browser-list", "browser ", "ext", "external",
+            "bm", "bm ", "bm add", "bm list", "bm search", "bm del", "bm tags",
         ]
         self.completion_index = -1
         self.completion_candidates: list[str] = []
@@ -1175,9 +1178,29 @@ class VimBrowser(QMainWindow):
                     # Browser name and URL
                     browser_name, url = parts
                     self.open_in_specific_browser(browser_name, url)
+        elif cmd.startswith("bm"):
+            # Handle bookmark commands
+            self.execute_bookmark_command(cmd)
         elif cmd in ["ext", "external"]:
             # Shorthand for opening in external browser
             self.open_in_external_browser()
+        elif cmd.startswith("export"):
+            # Handle export commands
+            if cmd in ["export-html", "export html"]:
+                self.export_page_html()
+            elif cmd in ["export-md", "export-markdown", "export md"]:
+                self.export_page_markdown()
+            elif cmd in ["export-pdf", "export pdf"]:
+                self.export_page_pdf()
+            elif cmd == "export":
+                # Show export help
+                self._show_notification(
+                    "Export commands:\n"
+                    ":export-html - Save page as HTML\n"
+                    ":export-md - Convert page to Markdown\n"
+                    ":export-pdf - Save page as PDF",
+                    timeout=5000
+                )
         elif cmd.isdigit():
             buf_num = int(cmd) - 1
             if 0 <= buf_num < len(self.buffers):
@@ -1674,6 +1697,109 @@ class VimBrowser(QMainWindow):
         
         self.open_url(to_data_url(buffers_html))
 
+    def execute_bookmark_command(self, cmd: str) -> None:
+        """Handle bookmark subcommands."""
+        if not self.bookmark_store:
+            self._show_notification("Bookmark store not initialized", timeout=2500)
+            return
+        
+        parts = cmd.split(maxsplit=2)
+        subcommand = parts[1] if len(parts) > 1 else "list"
+        
+        if subcommand == "add":
+            # Add current page as bookmark
+            current_url = self.browser.url().toString()
+            if not current_url or current_url.startswith("data:"):
+                self._show_notification("Cannot bookmark data URLs", timeout=2500)
+                return
+            
+            # Get title from page or use URL
+            title = current_url
+            try:
+                # Try to get page title
+                title = self.browser.page().title() or current_url
+            except Exception:
+                pass
+            
+            # Parse additional args (tags)
+            tags = []
+            if len(parts) > 2:
+                tags = [t.strip() for t in parts[2].split(",")]
+            
+            bookmark = Bookmark(
+                id=str(uuid.uuid4()),
+                title=title,
+                url=current_url,
+                tags=tags,
+                bookmark_type="url",
+            )
+            self.bookmark_store.add(bookmark)
+            self._show_notification(f"Bookmark added: {title[:40]}", timeout=2500)
+        
+        elif subcommand == "list":
+            # Show all bookmarks
+            self.show_bookmarks()
+        
+        elif subcommand == "search":
+            # Search bookmarks
+            if len(parts) < 3:
+                self._show_notification("Usage: :bm search <query>", timeout=2500)
+                return
+            query = parts[2]
+            self.show_bookmarks(query=query)
+        
+        elif subcommand == "del" or subcommand == "delete":
+            # Delete a bookmark by ID
+            if len(parts) < 3:
+                self._show_notification("Usage: :bm del <id>", timeout=2500)
+                return
+            bookmark_id = parts[2]
+            if self.bookmark_store.remove(bookmark_id):
+                self._show_notification(f"Bookmark {bookmark_id[:8]} deleted", timeout=2500)
+            else:
+                self._show_notification(f"Bookmark {bookmark_id[:8]} not found", timeout=2500)
+        
+        elif subcommand == "tags":
+            # Show all tags
+            tags = self.bookmark_store.get_all_tags()
+            if tags:
+                tags_html = "<br>".join(f"#{tag}" for tag in tags)
+                self._show_notification(f"Tags: {', '.join(tags)}", timeout=3000)
+            else:
+                self._show_notification("No tags found", timeout=2000)
+        
+        else:
+            self._show_notification(f"Unknown bookmark command: {subcommand}", timeout=2500)
+
+    def show_bookmarks(self, query: Optional[str] = None) -> None:
+        """Display bookmarks in a styled HTML view."""
+        if not self.bookmark_store:
+            self._show_notification("Bookmark store not initialized", timeout=2500)
+            return
+        
+        # Get bookmarks based on query
+        if query:
+            bookmarks = self.bookmark_store.search(query)
+        else:
+            bookmarks = self.bookmark_store.list_all()
+        
+        # Get statistics
+        all_tags = self.bookmark_store.get_all_tags()
+        
+        # Render template
+        html_content = render_template(
+            "bookmarks.html",
+            {
+                "bookmarks": bookmarks,
+                "total_count": len(self.bookmark_store.list_all()),
+                "tag_count": len(all_tags),
+                "query": query,
+            }
+        )
+        
+        # Load in browser
+        self.open_url(create_data_url(html_content))
+
     def update_title(self):
         self.setWindowTitle("Minimal Browser")
 
@@ -1701,274 +1827,75 @@ class VimBrowser(QMainWindow):
         if self.mode == "NORMAL":
             self.update_title()
 
+    def export_page_html(self):
+        """Export current page as HTML snapshot."""
+        if not hasattr(self, "browser") or self.browser is None:
+            self._show_notification("Browser instance unavailable", timeout=2500)
+            return
+
+        def handle_html(html_content: str) -> None:
+            try:
+                exporter = PageExporter()
+                url = self._current_url() or "page"
+                output_path = exporter.export_html(html_content, url)
+                self._show_notification(
+                    f"HTML exported to:\n{output_path}",
+                    timeout=5000
+                )
+            except Exception as e:
+                self._show_notification(
+                    f"Export failed: {str(e)}",
+                    timeout=3000
+                )
+
+        self.browser.page().toHtml(handle_html)
+
+    def export_page_markdown(self):
+        """Export current page as Markdown."""
+        if not hasattr(self, "browser") or self.browser is None:
+            self._show_notification("Browser instance unavailable", timeout=2500)
+            return
+
+        def handle_html(html_content: str) -> None:
+            try:
+                exporter = PageExporter()
+                url = self._current_url() or "page"
+                output_path = exporter.export_markdown(html_content, url)
+                self._show_notification(
+                    f"Markdown exported to:\n{output_path}",
+                    timeout=5000
+                )
+            except Exception as e:
+                self._show_notification(
+                    f"Export failed: {str(e)}",
+                    timeout=3000
+                )
+
+        self.browser.page().toHtml(handle_html)
+
+    def export_page_pdf(self):
+        """Export current page as PDF."""
+        if not hasattr(self, "browser") or self.browser is None:
+            self._show_notification("Browser instance unavailable", timeout=2500)
+            return
+
+        def handle_html(html_content: str) -> None:
+            try:
+                exporter = PageExporter()
+                url = self._current_url() or "page"
+                output_path = exporter.export_pdf(html_content, url)
+                self._show_notification(
+                    f"PDF exported to:\n{output_path}",
+                    timeout=5000
+                )
+            except Exception as e:
+                self._show_notification(
+                    f"Export failed: {str(e)}",
+                    timeout=3000
+                )
+
+        self.browser.page().toHtml(handle_html)
+
     def get_help_content(self):
-        return """<!DOCTYPE html>
-<html>
-<head>
-    <title>Vim Browser Help</title>
-    <style>
-        body {
-            font-family: monospace;
-            background: rgba(30,30,30,1);
-            color: #ffffff;
-            padding: 20px;
-            line-height: 1.6;
-        }
-        h1, h2 {
-            color: #4a9eff;
-        }
-        .key {
-            background: #333;
-            padding: 2px 6px;
-            border-radius: 3px;
-            font-weight: bold;
-        }
-        .section {
-            margin-bottom: 30px;
-        }
-        table {
-            border-collapse: collapse;
-            width: 100%;
-        }
-        td {
-            padding: 8px;
-            border-bottom: 1px solid #333;
-        }
-        .cmd {
-            color: #90ee90;
-        }
-    </style>
-</head>
-<body>
-    <h1>Vim Browser Help</h1>
-    
-    <div class="section">
-        <h2>Navigation</h2>
-        <table>
-            <tr>
-                <td><span class="key">j/k</span></td>
-                <td>Scroll down/up</td>
-            </tr>
-            <tr>
-                <td><span class="key">d/u</span></td>
-                <td>Page down/up</td>
-            </tr>
-            <tr>
-                <td><span class="key">g/G</span></td>
-                <td>Top/bottom of page</td>
-            </tr>
-            <tr>
-                <td><span class="key">H/L</span></td>
-                <td>Back/forward</td>
-            </tr>
-            <tr>
-                <td><span class="key">r</span></td>
-                <td>Reload page</td>
-            </tr>
-        </table>
-    </div>
-    
-    <div class="section">
-        <h2>Buffers (Tabs)</h2>
-        <table>
-            <tr>
-                <td><span class="key">n/p</span></td>
-                <td>Next/previous buffer</td>
-            </tr>
-            <tr>
-                <td><span class="key">t</span></td>
-                <td>New buffer</td>
-            </tr>
-            <tr>
-                <td><span class="key">x</span></td>
-                <td>Close buffer</td>
-            </tr>
-            <tr>
-                <td><span class="key">:b</span></td>
-                <td>Show detailed buffer list with URLs</td>
-            </tr>
-            <tr>
-                <td><span class="key">:1,2,3...</span></td>
-                <td>Go to buffer number</td>
-            </tr>
-        </table>
-    </div>
-    
-    <div class="section">
-        <h2>Opening URLs & Search</h2>
-        <table>
-            <tr>
-                <td><span class="key">o</span></td>
-                <td>Open URL (with Tab completion for history)</td>
-            </tr>
-            <tr>
-                <td><span class="key">e</span></td>
-                <td>Open current page in external browser</td>
-            </tr>
-            <tr>
-                <td><span class="key">s</span></td>
-                <td>Smart search (Google or URL)</td>
-            </tr>
-            <tr>
-                <td><span class="key">a</span></td>
-                <td>AI search (ChatGPT)</td>
-            </tr>
-            <tr>
-                <td><span class="key">Space</span></td>
-                <td>Native AI chat</td>
-            </tr>
-            <tr>
-                <td><span class="key">/</span></td>
-                <td>Search in page</td>
-            </tr>
-        </table>
-    </div>
-    
-    <div class="section">
-        <h2>Command Prompt Features</h2>
-        <table>
-            <tr>
-                <td><span class="key">Ctrl+Up/Down</span></td>
-                <td>Cycle between command modes (:, /, o, s, a)</td>
-            </tr>
-            <tr>
-                <td><span class="key">Tab</span></td>
-                <td>Complete commands (:) or cycle URL history (o)</td>
-            </tr>
-            <tr>
-                <td><span class="key">Ctrl+Space</span></td>
-                <td>Show recent URL history (in o mode)</td>
-            </tr>
-        </table>
-    </div>
-    
-    <div class="section">
-        <h2>Developer Tools</h2>
-        <table>
-            <tr>
-                <td><span class="key">F10</span></td>
-                <td>Toggle developer tools</td>
-            </tr>
-            <tr>
-                <td><span class="key">Ctrl+U</span></td>
-                <td>View page source</td>
-            </tr>
-            <tr>
-                <td><span class="key">Ctrl+I</span></td>
-                <td>Show debug info</td>
-            </tr>
-            <tr>
-                <td><span class="key">Ctrl+Shift+O</span></td>
-                <td>Open current page in external browser</td>
-            </tr>
-            <tr>
-                <td><span class="key">Ctrl+Shift+S</span></td>
-                <td>Screenshot analysis with AI vision</td>
-            </tr>
-        </table>
-    </div>
-    
-    <div class="section">
-        <h2>AI Integration</h2>
-        <table>
-            <tr>
-                <td><span class="key">Space</span></td>
-                <td>Ask AI anything - it can navigate or create content</td>
-            </tr>
-            <tr>
-                <td><span class="key">Ctrl+Shift+S</span></td>
-                <td>Screenshot + AI vision analysis</td>
-            </tr>
-            <tr colspan="2"><td></td><td>Examples:</td></tr>
-            <tr>
-                <td></td>
-                <td>"navigate to github" &rarr; Opens GitHub</td>
-            </tr>
-            <tr>
-                <td></td>
-                <td>"create a todo list" &rarr; Generates interactive todo app</td>
-            </tr>
-            <tr>
-                <td></td>
-                <td>"make a calculator" &rarr; Creates working calculator</td>
-            </tr>
-            <tr>
-                <td></td>
-                <td>"explain quantum physics" &rarr; Generates explanation page</td>
-            </tr>
-        </table>
-    </div>
-    
-    <div class="section">
-        <h2>Commands (:)</h2>
-        <table>
-            <tr>
-                <td><span class="cmd">:q</span></td>
-                <td>Quit</td>
-            </tr>
-            <tr>
-                <td><span class="cmd">:help</span></td>
-                <td>Show this help</td>
-            </tr>
-            <tr>
-                <td><span class="cmd">:e &lt;url&gt;</span></td>
-                <td>Open URL</td>
-            </tr>
-            <tr>
-                <td><span class="cmd">:bd</span></td>
-                <td>Close buffer</td>
-            </tr>
-            <tr>
-                <td><span class="cmd">:bn/:bp</span></td>
-                <td>Next/previous buffer</td>
-            </tr>
-            <tr>
-                <td><span class="cmd">:browser</span></td>
-                <td>Open current page in external browser</td>
-            </tr>
-            <tr>
-                <td><span class="cmd">:browser &lt;name&gt;</span></td>
-                <td>Open in specific browser (firefox, chrome, etc.)</td>
-            </tr>
-            <tr>
-                <td><span class="cmd">:browser-list</span></td>
-                <td>List available browsers</td>
-            </tr>
-            <tr>
-                <td><span class="cmd">:ext</span></td>
-                <td>Open current page in external browser (shorthand)</td>
-            </tr>
-        </table>
-    </div>
-    
-    <div class="section">
-        <h2>Modes</h2>
-        <table>
-            <tr>
-                <td><span class="key">NORMAL</span></td>
-                <td>Default mode for navigation</td>
-            </tr>
-            <tr>
-                <td><span class="key">COMMAND</span></td>
-                <td>Typing commands or URLs</td>
-            </tr>
-            <tr>
-                <td><span class="key">Escape</span></td>
-                <td>Return to NORMAL mode</td>
-            </tr>
-        </table>
-    </div>
-    
-    <div class="section">
-        <h2>Examples</h2>
-        <p><span class="key">s python tutorial</span> &rarr; Google search</p>
-        <p><span class="key">s github.com</span> &rarr; Open GitHub</p>
-        <p><span class="key">a explain quantum computing</span> &rarr; Ask ChatGPT</p>
-        <p><span class="key">Space navigate to reddit</span> &rarr; AI opens Reddit</p>
-        <p><span class="key">Space create a calculator</span> &rarr; AI generates calculator</p>
-        <p><span class="key">o reddit.com</span> &rarr; Open Reddit</p>
-    </div>
-    
-    <p style="margin-top: 40px; color: #666;"><span class="key">Press Escape</span> to return to normal browsing</p>
-</body>
-</html>"""
+        """Load help content from template file."""
+        return get_help_content()

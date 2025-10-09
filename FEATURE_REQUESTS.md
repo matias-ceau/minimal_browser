@@ -104,9 +104,14 @@ Legend: **Priority** = (High/Medium/Low), **Status** = (Idea ▢ / Planned ◧ /
 
 ## P3 · Long-Term Explorations
 
+### FR-003: Native Module Optimization
+- **Summary:** Investigate and implement native modules (Rust/C++) for performance-critical operations. Research Tauri integration as alternative browser engine.
+- **Priority**: Medium · **Status**: ◧ Planned
+- **Investigation Document**: See `docs/TAURI_INVESTIGATION.md`
+
 ### FR-060: Native Performance Modules
 - **Summary:** Profile hotspots and trial Rust/C++ modules for CPU/GPU-heavy tasks.
-- **Priority:** Low · **Status:** ▢ Idea
+- **Priority:** Low · **Status:** ◧ Planned (superseded by FR-003)
 
 ### FR-061: Persistent Login Cookies
 - **Summary:** Enable long-lived sessions with secure cookie storage.

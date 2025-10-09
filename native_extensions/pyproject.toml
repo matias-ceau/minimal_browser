@@ -1,0 +1,18 @@
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "minimal_browser_native"
+version = "0.1.0"
+description = "Native performance optimizations for Minimal Browser"
+requires-python = ">=3.13"
+classifiers = [
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: 3.13",
+]
+
+[tool.maturin]
+python-source = "python"
+module-name = "minimal_browser_native"
