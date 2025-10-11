@@ -532,9 +532,22 @@ class VimBrowser(QMainWindow):
         self.setCentralWidget(self.main_splitter)
         
         # Set initial sizes (70% browser, 30% sidebar)
-        self.main_splitter.setSizes([700, 300])
+        BROWSER_SPLITTER_RATIO = 0.7
+        SIDEBAR_SPLITTER_RATIO = 0.3
+        window_width = self.width() if self.width() > 0 else 1000  # Fallback to 1000 if not yet shown
+        browser_size = int(window_width * BROWSER_SPLITTER_RATIO)
+        sidebar_size = int(window_width * SIDEBAR_SPLITTER_RATIO)
+        self.main_splitter.setSizes([browser_size, sidebar_size])
 
-    def _init_command_line(self):
+    def resizeEvent(self, event):
+        """Ensure splitter sizes remain proportional on window resize."""
+        super().resizeEvent(event)
+        BROWSER_SPLITTER_RATIO = 0.7
+        SIDEBAR_SPLITTER_RATIO = 0.3
+        window_width = self.width()
+        browser_size = int(window_width * BROWSER_SPLITTER_RATIO)
+        sidebar_size = int(window_width * SIDEBAR_SPLITTER_RATIO)
+        self.main_splitter.setSizes([browser_size, sidebar_size])
         self.command_palette = CommandPalette(self)
         self.command_line = self.command_palette.input
         self.command_palette.hide()
