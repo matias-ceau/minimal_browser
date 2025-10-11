@@ -803,12 +803,13 @@ class VimBrowser(QMainWindow):
                 action = ResponseProcessor.parse_response(payload)
                 action_summary = f"{action.type.upper()}: {str(action)[:100]}..."
                 self.ai_sidebar.add_message("assistant", action_summary)
-            except Exception:
+            except (ValueError, StructuredAIError) as exc:
+                print(f"AI response parsing failed in sidebar: {exc}")
                 self.ai_sidebar.add_message("assistant", payload[:200] + "...")
 
         try:
             action = ResponseProcessor.parse_response(payload)
-        except Exception as exc:  # pragma: no cover - defensive fallback
+        except (ValueError, StructuredAIError) as exc:  # pragma: no cover - defensive fallback
             print(f"AI response parsing failed: {exc}")
             action = ResponseProcessor.parse_response(f"HTML:{payload}")
 
