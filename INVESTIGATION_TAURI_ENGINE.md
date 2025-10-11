@@ -2,7 +2,7 @@
 
 > **Status:** Draft Investigation  
 > **Date:** 2025-01-09  
-> **Related Issues:** [FR-003: Native Module Optimization](https://github.com/matias-ceau/minimal_browser/issues/3), FR-060: Native Performance Modules  
+> **Related Issues:** [FR-003: Native Module Optimization](https://github.com/matias-ceau/minimal_browser/issues/3), FR-060 (internal): Native Performance Modules  
 > **Author:** Architecture Investigation Team
 
 ## Executive Summary
