@@ -801,7 +801,7 @@ class VimBrowser(QMainWindow):
             # Parse the response to show a cleaner version in sidebar
             try:
                 action = ResponseProcessor.parse_response(payload)
-                action_summary = f"{action.type.upper()}: {str(action)[:100]}..."
+                action_summary = f"{action.type.upper()}: {str(action)[:100]}{'...' if len(str(action)) > 100 else ''}"
                 self.ai_sidebar.add_message("assistant", action_summary)
             except (ValueError, StructuredAIError) as exc:
                 print(f"AI response parsing failed in sidebar: {exc}")
