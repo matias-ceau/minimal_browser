@@ -6,20 +6,35 @@ definitions and validation logic in isolation.
 
 from __future__ import annotations
 
+import importlib.util
+import sys
+from pathlib import Path
+
 import pytest
+from pydantic import HttpUrl, ValidationError
 
 # Skip all tests if pydantic is not available
 pytest.importorskip("pydantic")
 
-# Try to import - if PySide6 is required, these tests will be skipped
+def import_module_direct(name: str, filepath: str):
+    """Import a module directly from file path, bypassing package __init__.py"""
+    spec = importlib.util.spec_from_file_location(name, filepath)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+# Import schemas module directly to avoid PySide6 dependency
 try:
-    from pydantic import HttpUrl, ValidationError
-    from minimal_browser.ai.schemas import (
-        AIAction,
-        HtmlAction,
-        NavigateAction,
-        SearchAction,
-    )
+    src_dir = Path(__file__).parent.parent.parent.parent / "src" / "minimal_browser"
+    schemas_module = import_module_direct('minimal_browser.ai.schemas', str(src_dir / 'ai' / 'schemas.py'))
+    
+    # Extract the classes we need
+    AIAction = schemas_module.AIAction
+    HtmlAction = schemas_module.HtmlAction
+    NavigateAction = schemas_module.NavigateAction
+    SearchAction = schemas_module.SearchAction
+    
     SCHEMAS_AVAILABLE = True
 except (ImportError, ModuleNotFoundError) as e:
     SCHEMAS_AVAILABLE = False

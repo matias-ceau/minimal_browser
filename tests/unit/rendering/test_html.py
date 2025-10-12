@@ -8,12 +8,21 @@ from pathlib import Path
 
 import pytest
 
-# Add src to path and import directly to avoid PySide6 dependency
-src_path = Path(__file__).parent.parent.parent.parent / "src"
-sys.path.insert(0, str(src_path))
+# Direct module import to avoid loading __init__.py with PySide6 dependency
+import importlib.util
 
-# Import the module directly without going through __init__.py
-from minimal_browser.rendering import html as html_module
+def import_module_direct(name: str, filepath: str):
+    """Import module directly from file without loading parent __init__.py."""
+    spec = importlib.util.spec_from_file_location(name, filepath)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module  # Register for relative imports
+    spec.loader.exec_module(module)
+    return module
+
+src_dir = Path(__file__).parent.parent.parent.parent / "src" / "minimal_browser"
+
+# Import html module directly
+html_module = import_module_direct("minimal_browser.rendering.html", str(src_dir / "rendering" / "html.py"))
 
 create_data_url = html_module.create_data_url
 ensure_html = html_module.ensure_html
@@ -74,20 +83,20 @@ class TestEnsureHtml:
     def test_ensure_html_with_doctype(self):
         """Test ensure_html with complete HTML document."""
         html = "<!DOCTYPE html><html><body>test</body></html>"
-        result = ensure_html(html)
+        result = ensure_html(html, "test query")
         assert result == html
 
     def test_ensure_html_with_html_tag(self):
         """Test ensure_html with HTML tag but no doctype."""
         html = "<html><body>test</body></html>"
-        result = ensure_html(html)
+        result = ensure_html(html, "test query")
         # Should wrap or return as-is depending on implementation
         assert "<html>" in result or "<!DOCTYPE html>" in result
 
     def test_ensure_html_plain_text(self):
         """Test ensure_html wraps plain text."""
         text = "Plain text content"
-        result = ensure_html(text)
+        result = ensure_html(text, "test query")
         # Should be wrapped in HTML
         assert "<html>" in result or "<!DOCTYPE html>" in result
         assert "Plain text content" in result
@@ -95,7 +104,7 @@ class TestEnsureHtml:
     def test_ensure_html_with_tags(self):
         """Test ensure_html with HTML tags but no html/body."""
         html = "<h1>Title</h1><p>Content</p>"
-        result = ensure_html(html)
+        result = ensure_html(html, "test query")
         assert "<h1>Title</h1>" in result
         assert "<p>Content</p>" in result
 
