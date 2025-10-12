@@ -170,7 +170,6 @@ class CommandPalette(QWidget):
         self.input.clear()
 
 
-
 class AIWorker(QThread):
     """Worker thread for AI API calls with streaming support"""
 
