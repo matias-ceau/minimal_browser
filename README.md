@@ -9,9 +9,11 @@ Minimal Browser is a vim-inspired Qt WebEngine shell with a built-in AI copilot.
 
 - **Modal ergonomics:** NORMAL/COMMAND/INSERT modes with familiar vim keybindings.
 - **Native AI assistant:** Structured responses (navigate/search/html) parsed via Pydantic for deterministic actions.
+- **AI vision analysis:** Capture screenshots and analyze them with GPT-4o vision capabilities (Ctrl+Shift+S).
 - **Pluggable engines:** Abstract `WebEngine` contract with a Qt WebEngine implementation today and hooks for GTK/others tomorrow.
 - **Smart rendering:** AI HTML responses rendered via Jinja templates and injected as data URLs for instant previews.
 - **Conversation memory:** Rolling in-memory history plus optional JSON persistence for long-running sessions.
+- **Performance optimizations:** Optional native (Rust/C) modules for CPU-intensive operations with transparent fallback to pure Python.
 
 ## 🧱 Project Layout
 
@@ -22,8 +24,12 @@ src/minimal_browser/
 ├── engines/           # Web engine abstractions and the Qt implementation
 ├── storage/           # Conversation logging utilities
 ├── templates/         # HTML templates (AI response card, help screen)
+├── native/            # Optional native optimizations (Rust/C)
 ├── minimal_browser.py # VimBrowser UI, command palette, AI worker wiring
 └── main.py            # Entry point + environment setup
+
+native_extensions/     # Optional Rust extensions for performance
+benchmarks/            # Performance benchmarks and tests
 ```
 
 ## 🚀 Getting Started
@@ -90,6 +96,39 @@ uv run python -m minimal_browser
 
 The keychain integration is optional - if `keyring` is not available or fails, the browser will fall back to environment variables only.
 
+## ⚡ Performance Optimizations (Optional)
+
+Minimal Browser includes an optional native module system that accelerates CPU-intensive operations (regex matching, base64 encoding, markdown conversion) using Rust. The system provides 2-10x performance improvements while maintaining transparent fallback to pure Python.
+
+**To enable native optimizations (requires Rust):**
+
+```bash
+# Install Rust if not already installed
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
+# Install maturin (Rust-Python bridge)
+pip install maturin
+
+# Build and install native module
+cd native_extensions
+maturin develop
+cd ..
+```
+
+**Verify it's working:**
+
+```bash
+python3 benchmarks/demo_optimizations.py
+```
+
+**Performance benchmarking:**
+
+```bash
+python3 -m benchmarks.text_processing_benchmark
+```
+
+For detailed information, see [`NATIVE_OPTIMIZATION.md`](NATIVE_OPTIMIZATION.md) and [`benchmarks/README.md`](benchmarks/README.md).
+
 ## 🧭 Current Status & Known Gaps
 
 The codebase is evolving quickly. Key gaps we plan to address next:
@@ -109,6 +148,7 @@ For a detailed critique and near-term roadmap, see the **Architecture Roadmap** 
 - Configurable AI model routing with health checks
 - Rendering toolkit for richer AI-generated mini-apps
 - Storage enhancements (SQLite/LiteFS) for searchable history
+- **Native module optimization**: Investigation into Tauri and Rust/C++ modules (see `docs/TAURI_INVESTIGATION.md`)
 
 Track progress in [`ROADMAP.md`](ROADMAP.md) and detailed feature ideas in [`FEATURE_REQUESTS.md`](FEATURE_REQUESTS.md).
 
