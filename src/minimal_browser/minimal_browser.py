@@ -408,6 +408,7 @@ class VimBrowser(QMainWindow):
             "q", "quit", "w", "write", "wq", "help", "h",
             "e ", "b", "bd", "bn", "bp",
             "browser", "browser-list", "browser ", "ext", "external",
+            "files", "files ", "fb", "fb ", "index", "index ", "search-files ",
             "bm", "bm ", "bm add", "bm list", "bm search", "bm del", "bm tags",
         ]
         self.completion_index = -1
@@ -1184,6 +1185,33 @@ class VimBrowser(QMainWindow):
         elif cmd in ["ext", "external"]:
             # Shorthand for opening in external browser
             self.open_in_external_browser()
+        elif cmd.startswith("files") or cmd.startswith("fb"):
+            # File browser commands
+            if cmd in ["files", "fb"]:
+                # Show file browser for current directory
+                self.show_file_browser()
+            elif cmd.startswith("files "):
+                # Browse specific directory
+                path = cmd[6:].strip()
+                self.show_file_browser(path)
+            elif cmd.startswith("fb "):
+                # Browse specific directory (shorthand)
+                path = cmd[3:].strip()
+                self.show_file_browser(path)
+        elif cmd.startswith("index"):
+            # Index files with embeddings
+            if cmd.startswith("index "):
+                path = cmd[6:].strip()
+                self.index_directory(path)
+            else:
+                self.index_directory()
+        elif cmd.startswith("search-files"):
+            # Search indexed files
+            if cmd.startswith("search-files "):
+                query = cmd[13:].strip()
+                self.search_indexed_files(query)
+            else:
+                self._show_notification("Usage: :search-files <query>", timeout=2000)
         elif cmd.startswith("export"):
             # Handle export commands
             if cmd in ["export-html", "export html"]:
@@ -1697,6 +1725,174 @@ class VimBrowser(QMainWindow):
         
         self.open_url(to_data_url(buffers_html))
 
+    def show_file_browser(self, path: Optional[str] = None):
+        """Display file browser for the given path."""
+        from pathlib import Path
+        from .storage.file_browser import FileBrowser
+        from .rendering.html import render_template, create_data_url
+        
+        try:
+            # Initialize file browser
+            if path:
+                target_path = Path(path).expanduser().resolve()
+            else:
+                target_path = Path.home()
+            
+            browser = FileBrowser(target_path)
+            
+            # Get directory listing
+            entries = browser.list_directory()
+            
+            # Prepare context for template
+            context = {
+                "current_path": str(browser.current_path),
+                "parent_path": str(browser.current_path.parent) if browser.current_path.parent != browser.current_path else None,
+                "home_path": str(Path.home()),
+                "entries": [entry.to_dict() for entry in entries],
+            }
+            
+            # Render template
+            html_content = render_template("file_browser.html", context)
+            
+            # Open in browser
+            self.open_url(create_data_url(html_content))
+            
+        except Exception as e:
+            error_msg = f"Failed to browse directory: {e}"
+            self._show_notification(error_msg, timeout=3000)
+            print(error_msg)
+
+    def index_directory(self, path: Optional[str] = None):
+        """Index files in directory with embeddings."""
+        from pathlib import Path
+        from .storage.file_browser import FileIndexer
+        
+        try:
+            # Determine target path
+            if path:
+                target_path = Path(path).expanduser().resolve()
+            else:
+                target_path = Path.home()
+            
+            if not target_path.is_dir():
+                self._show_notification(f"Not a directory: {target_path}", timeout=2000)
+                return
+            
+            # Show progress notification
+            self._show_notification(f"Indexing files in {target_path}...", timeout=2000)
+            
+            # Index files
+            indexer = FileIndexer()
+            count = indexer.index_directory(target_path, recursive=True, max_files=100)
+            
+            # Show completion
+            self._show_notification(f"Indexed {count} files", timeout=3000)
+            
+        except Exception as e:
+            error_msg = f"Failed to index directory: {e}"
+            self._show_notification(error_msg, timeout=3000)
+            print(error_msg)
+
+    def search_indexed_files(self, query: str):
+        """Search indexed files by semantic similarity."""
+        from .storage.file_browser import FileIndexer
+        from .rendering.html import render_template, create_data_url
+        
+        try:
+            indexer = FileIndexer()
+            results = indexer.search_files(query, n_results=10)
+            
+            if not results:
+                self._show_notification("No matching files found", timeout=2000)
+                return
+            
+            # Build HTML for results
+            results_html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>File Search Results</title>
+    <style>
+        body {{
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: #e0e0e0;
+            margin: 0;
+            padding: 20px;
+            min-height: 100vh;
+        }}
+        .container {{
+            max-width: 1200px;
+            margin: 0 auto;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            padding: 20px;
+            backdrop-filter: blur(10px);
+        }}
+        h1 {{ color: #4fc3f7; }}
+        .query {{
+            background: rgba(255, 255, 255, 0.1);
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }}
+        .result {{
+            background: rgba(255, 255, 255, 0.05);
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 10px;
+            transition: all 0.2s;
+        }}
+        .result:hover {{
+            background: rgba(255, 255, 255, 0.1);
+            transform: translateX(5px);
+        }}
+        .file-path {{
+            color: #81c784;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }}
+        .file-type {{
+            color: #9e9e9e;
+            font-size: 0.9em;
+        }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 File Search Results</h1>
+        <div class="query">
+            <strong>Query:</strong> {html.escape(query)}
+        </div>
+        <div class="results">
+"""
+            
+            for result in results:
+                file_path = result.get('path', 'Unknown')
+                file_name = result.get('name', 'Unknown')
+                file_type = result.get('type', 'unknown')
+                
+                results_html += f"""
+            <div class="result">
+                <div class="file-path">📄 {html.escape(file_name)}</div>
+                <div style="color: #b0b0b0; font-size: 0.85em;">{html.escape(file_path)}</div>
+                <div class="file-type">Type: {html.escape(file_type)}</div>
+            </div>
+"""
+            
+            results_html += """
+        </div>
+    </div>
+</body>
+</html>
+"""
+            
+            self.open_url(create_data_url(results_html))
+            
+        except Exception as e:
+            error_msg = f"Failed to search files: {e}"
+            self._show_notification(error_msg, timeout=3000)
+            print(error_msg)
     def execute_bookmark_command(self, cmd: str) -> None:
         """Handle bookmark subcommands."""
         if not self.bookmark_store:
@@ -1897,5 +2093,281 @@ class VimBrowser(QMainWindow):
         self.browser.page().toHtml(handle_html)
 
     def get_help_content(self):
-        """Load help content from template file."""
-        return get_help_content()
+        return """<!DOCTYPE html>
+<html>
+<head>
+    <title>Vim Browser Help</title>
+    <style>
+        body {
+            font-family: monospace;
+            background: rgba(30,30,30,1);
+            color: #ffffff;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        h1, h2 {
+            color: #4a9eff;
+        }
+        .key {
+            background: #333;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-weight: bold;
+        }
+        .section {
+            margin-bottom: 30px;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+        }
+        td {
+            padding: 8px;
+            border-bottom: 1px solid #333;
+        }
+        .cmd {
+            color: #90ee90;
+        }
+    </style>
+</head>
+<body>
+    <h1>Vim Browser Help</h1>
+    
+    <div class="section">
+        <h2>Navigation</h2>
+        <table>
+            <tr>
+                <td><span class="key">j/k</span></td>
+                <td>Scroll down/up</td>
+            </tr>
+            <tr>
+                <td><span class="key">d/u</span></td>
+                <td>Page down/up</td>
+            </tr>
+            <tr>
+                <td><span class="key">g/G</span></td>
+                <td>Top/bottom of page</td>
+            </tr>
+            <tr>
+                <td><span class="key">H/L</span></td>
+                <td>Back/forward</td>
+            </tr>
+            <tr>
+                <td><span class="key">r</span></td>
+                <td>Reload page</td>
+            </tr>
+        </table>
+    </div>
+    
+    <div class="section">
+        <h2>Buffers (Tabs)</h2>
+        <table>
+            <tr>
+                <td><span class="key">n/p</span></td>
+                <td>Next/previous buffer</td>
+            </tr>
+            <tr>
+                <td><span class="key">t</span></td>
+                <td>New buffer</td>
+            </tr>
+            <tr>
+                <td><span class="key">x</span></td>
+                <td>Close buffer</td>
+            </tr>
+            <tr>
+                <td><span class="key">:b</span></td>
+                <td>Show detailed buffer list with URLs</td>
+            </tr>
+            <tr>
+                <td><span class="key">:1,2,3...</span></td>
+                <td>Go to buffer number</td>
+            </tr>
+        </table>
+    </div>
+    
+    <div class="section">
+        <h2>Opening URLs & Search</h2>
+        <table>
+            <tr>
+                <td><span class="key">o</span></td>
+                <td>Open URL (with Tab completion for history)</td>
+            </tr>
+            <tr>
+                <td><span class="key">e</span></td>
+                <td>Open current page in external browser</td>
+            </tr>
+            <tr>
+                <td><span class="key">s</span></td>
+                <td>Smart search (Google or URL)</td>
+            </tr>
+            <tr>
+                <td><span class="key">a</span></td>
+                <td>AI search (ChatGPT)</td>
+            </tr>
+            <tr>
+                <td><span class="key">Space</span></td>
+                <td>Native AI chat</td>
+            </tr>
+            <tr>
+                <td><span class="key">/</span></td>
+                <td>Search in page</td>
+            </tr>
+        </table>
+    </div>
+    
+    <div class="section">
+        <h2>Command Prompt Features</h2>
+        <table>
+            <tr>
+                <td><span class="key">Ctrl+Up/Down</span></td>
+                <td>Cycle between command modes (:, /, o, s, a)</td>
+            </tr>
+            <tr>
+                <td><span class="key">Tab</span></td>
+                <td>Complete commands (:) or cycle URL history (o)</td>
+            </tr>
+            <tr>
+                <td><span class="key">Ctrl+Space</span></td>
+                <td>Show recent URL history (in o mode)</td>
+            </tr>
+        </table>
+    </div>
+    
+    <div class="section">
+        <h2>Developer Tools</h2>
+        <table>
+            <tr>
+                <td><span class="key">F10</span></td>
+                <td>Toggle developer tools</td>
+            </tr>
+            <tr>
+                <td><span class="key">Ctrl+U</span></td>
+                <td>View page source</td>
+            </tr>
+            <tr>
+                <td><span class="key">Ctrl+I</span></td>
+                <td>Show debug info</td>
+            </tr>
+            <tr>
+                <td><span class="key">Ctrl+Shift+O</span></td>
+                <td>Open current page in external browser</td>
+            </tr>
+        </table>
+    </div>
+    
+    <div class="section">
+        <h2>AI Integration</h2>
+        <table>
+            <tr>
+                <td><span class="key">Space</span></td>
+                <td>Ask AI anything - it can navigate or create content</td>
+            </tr>
+            <tr colspan="2"><td></td><td>Examples:</td></tr>
+            <tr>
+                <td></td>
+                <td>"navigate to github" &rarr; Opens GitHub</td>
+            </tr>
+            <tr>
+                <td></td>
+                <td>"create a todo list" &rarr; Generates interactive todo app</td>
+            </tr>
+            <tr>
+                <td></td>
+                <td>"make a calculator" &rarr; Creates working calculator</td>
+            </tr>
+            <tr>
+                <td></td>
+                <td>"explain quantum physics" &rarr; Generates explanation page</td>
+            </tr>
+        </table>
+    </div>
+    
+    <div class="section">
+        <h2>Commands (:)</h2>
+        <table>
+            <tr>
+                <td><span class="cmd">:q</span></td>
+                <td>Quit</td>
+            </tr>
+            <tr>
+                <td><span class="cmd">:help</span></td>
+                <td>Show this help</td>
+            </tr>
+            <tr>
+                <td><span class="cmd">:e &lt;url&gt;</span></td>
+                <td>Open URL</td>
+            </tr>
+            <tr>
+                <td><span class="cmd">:bd</span></td>
+                <td>Close buffer</td>
+            </tr>
+            <tr>
+                <td><span class="cmd">:bn/:bp</span></td>
+                <td>Next/previous buffer</td>
+            </tr>
+            <tr>
+                <td><span class="cmd">:browser</span></td>
+                <td>Open current page in external browser</td>
+            </tr>
+            <tr>
+                <td><span class="cmd">:browser &lt;name&gt;</span></td>
+                <td>Open in specific browser (firefox, chrome, etc.)</td>
+            </tr>
+            <tr>
+                <td><span class="cmd">:browser-list</span></td>
+                <td>List available browsers</td>
+            </tr>
+            <tr>
+                <td><span class="cmd">:ext</span></td>
+                <td>Open current page in external browser (shorthand)</td>
+            </tr>
+            <tr>
+                <td><span class="cmd">:files [path]</span></td>
+                <td>Browse local files and directories</td>
+            </tr>
+            <tr>
+                <td><span class="cmd">:fb [path]</span></td>
+                <td>File browser (shorthand)</td>
+            </tr>
+            <tr>
+                <td><span class="cmd">:index [path]</span></td>
+                <td>Index files with embeddings for search</td>
+            </tr>
+            <tr>
+                <td><span class="cmd">:search-files &lt;query&gt;</span></td>
+                <td>Search indexed files semantically</td>
+            </tr>
+        </table>
+    </div>
+    
+    <div class="section">
+        <h2>Modes</h2>
+        <table>
+            <tr>
+                <td><span class="key">NORMAL</span></td>
+                <td>Default mode for navigation</td>
+            </tr>
+            <tr>
+                <td><span class="key">COMMAND</span></td>
+                <td>Typing commands or URLs</td>
+            </tr>
+            <tr>
+                <td><span class="key">Escape</span></td>
+                <td>Return to NORMAL mode</td>
+            </tr>
+        </table>
+    </div>
+    
+    <div class="section">
+        <h2>Examples</h2>
+        <p><span class="key">s python tutorial</span> &rarr; Google search</p>
+        <p><span class="key">s github.com</span> &rarr; Open GitHub</p>
+        <p><span class="key">a explain quantum computing</span> &rarr; Ask ChatGPT</p>
+        <p><span class="key">Space navigate to reddit</span> &rarr; AI opens Reddit</p>
+        <p><span class="key">Space create a calculator</span> &rarr; AI generates calculator</p>
+        <p><span class="key">o reddit.com</span> &rarr; Open Reddit</p>
+    </div>
+    
+    <p style="margin-top: 40px; color: #666;"><span class="key">Press Escape</span> to return to normal browsing</p>
+</body>
+</html>"""
