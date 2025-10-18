@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Dict, Iterable, List, Optional
+from typing import Annotated, Dict, Iterable, List, Optional
 
+from pydantic import BaseModel, Field, field_validator
 from pydantic_ai import Agent
-from pydantic import BaseModel
 
 from .models import AIModel, DEFAULT_MODEL, get_model
 from .schemas import AIAction
@@ -16,7 +16,17 @@ class StructuredAIError(RuntimeError):
 
 
 class StructuredActionEnvelope(BaseModel):
+    """Envelope for AI-generated actions with validation."""
+
     action: AIAction
+
+    @field_validator("action")
+    @classmethod
+    def validate_action(cls, v: AIAction) -> AIAction:
+        """Ensure the action is properly validated."""
+        if v is None:
+            raise ValueError("Action cannot be None")
+        return v
 
 
 class StructuredBrowserAgent:
@@ -29,6 +39,9 @@ class StructuredBrowserAgent:
         system_prompt: str,
         history: Optional[Iterable[Dict[str, str]]] = None,
     ) -> None:
+        if not system_prompt or not system_prompt.strip():
+            raise StructuredAIError("System prompt cannot be empty")
+
         self._model_name = model_name
         self._model_config = get_model(self._model_name)
         if self._model_config is None:
@@ -38,6 +51,19 @@ class StructuredBrowserAgent:
         self._init_agent()
 
         self._history: List[Dict[str, str]] = list(history or [])
+        self._validate_history()
+
+    def _validate_history(self) -> None:
+        """Validate that history entries have required fields."""
+        for idx, item in enumerate(self._history):
+            if not isinstance(item, dict):
+                raise StructuredAIError(
+                    f"History item at index {idx} must be a dictionary"
+                )
+            if "role" not in item or "content" not in item:
+                raise StructuredAIError(
+                    f"History item at index {idx} missing 'role' or 'content'"
+                )
 
     def _init_agent(self) -> None:
         agent_identifier = self._model_config.resolved_model_id()
@@ -49,6 +75,9 @@ class StructuredBrowserAgent:
 
     def run(self, user_query: str) -> AIAction:
         """Execute the agent and return a structured AIAction."""
+        if not user_query or not user_query.strip():
+            raise StructuredAIError("User query cannot be empty")
+
         history_lines = []
         for item in self._history:
             role = item.get("role", "user").capitalize()
@@ -85,7 +114,12 @@ class StructuredBrowserAgent:
             raise StructuredAIError(f"Structured agent failed: {message}") from exc
         if result.output is None:
             raise StructuredAIError("Structured agent returned no output.")
-        return result.output.action
+        
+        # Validate the action before returning
+        if not isinstance(result.output.action, (type(None).__class__,)):
+            # The action is already validated by Pydantic, just return it
+            return result.output.action
+        raise StructuredAIError("Invalid action type returned from agent")
 
     def _get_fallback_model(self) -> Optional[AIModel]:
         """Return a fallback model configuration when available."""

@@ -270,27 +270,35 @@ uv run python -m py_compile src/minimal_browser/minimal_browser.py
 
 ### Testing Your Changes
 
-Since we don't have automated tests yet, manual testing is crucial:
+The project now has a comprehensive testing infrastructure using pytest. See [TESTING.md](TESTING.md) for complete documentation.
 
-1. **Smoke test the core functionality**:
+**Quick testing workflow:**
+
+1. **Run all tests**:
    ```bash
-   uv run python -m minimal_browser
+   pytest
+   # or use the test runner
+   python run_tests.py
    ```
 
-2. **Test modal navigation**:
-   - Try vim-like keybindings (hjkl, etc.)
-   - Test command mode with `:q`, `:help`, `:e <url>`
-   - Verify normal/insert mode switching
+2. **Run specific test suite**:
+   ```bash
+   pytest tests/unit/ai/  # AI module tests
+   pytest tests/unit/rendering/  # Rendering tests
+   ```
 
-3. **Test AI integration** (if you have an API key):
-   - Press `Space` to activate AI mode
-   - Try different AI commands (navigate, search, generate HTML)
-   - Verify response parsing works correctly
+3. **Run with coverage**:
+   ```bash
+   pytest --cov=src/minimal_browser --cov-report=html
+   ```
 
-4. **Test web engine functionality**:
-   - Navigate to different websites
-   - Test page rendering and interaction
-   - Verify developer tools work (F12)
+4. **Manual testing** (still important for UI/integration):
+   - Smoke test the core functionality
+   - Test modal navigation (vim-like keybindings)
+   - Test AI integration (if you have an API key)
+   - Test web engine functionality
+
+For manual testing details, see below.
 
 ### Architecture Considerations
 
@@ -417,8 +425,8 @@ git commit -m "feat: add configurable AI model fallbacks
 
 ### High Priority (P0)
 - **Documentation improvements** (this file, README updates)
-- **Testing infrastructure** (unit tests for AI parsing)
 - **Bug fixes** for existing functionality
+- **Test coverage expansion** (add more test cases to existing tests)
 
 ### Medium Priority (P1)
 - **AI model configuration** improvements

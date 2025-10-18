@@ -72,6 +72,15 @@ class WebEngine(ABC):
         """Configure engine-specific settings"""
         pass
     
+    @abstractmethod
+    def capture_screenshot(self, callback: Callable[[bytes], None]):
+        """Capture a screenshot of the current page asynchronously
+        
+        Args:
+            callback: Function to call with PNG image data as bytes
+        """
+        pass
+    
     @property
     @abstractmethod
     def engine_name(self) -> str:

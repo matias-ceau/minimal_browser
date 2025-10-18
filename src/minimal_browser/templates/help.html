@@ -53,7 +53,8 @@
     <div class="section">
         <h2>Opening URLs & Search</h2>
         <table>
-            <tr><td><span class="key">o</span></td><td>Open URL</td></tr>
+            <tr><td><span class="key">o</span></td><td>Open URL (with Tab completion for history)</td></tr>
+            <tr><td><span class="key">e</span></td><td>Open current page in external browser</td></tr>
             <tr><td><span class="key">s</span></td><td>Smart search (Google or URL)</td></tr>
             <tr><td><span class="key">a</span></td><td>AI search (ChatGPT)</td></tr>
             <tr><td><span class="key">Space</span></td><td>Native AI chat</td></tr>
@@ -62,11 +63,21 @@
     </div>
     
     <div class="section">
+        <h2>Command Prompt Features</h2>
+        <table>
+            <tr><td><span class="key">Ctrl+Up/Down</span></td><td>Cycle between command modes (:, /, o, s, a)</td></tr>
+            <tr><td><span class="key">Tab</span></td><td>Complete commands (:) or cycle URL history (o)</td></tr>
+            <tr><td><span class="key">Ctrl+Space</span></td><td>Show recent URL history (in o mode)</td></tr>
+        </table>
+    </div>
+    
+    <div class="section">
         <h2>Developer Tools</h2>
         <table>
-            <tr><td><span class="key">F12</span></td><td>Toggle developer tools</td></tr>
+            <tr><td><span class="key">F10</span></td><td>Toggle developer tools</td></tr>
             <tr><td><span class="key">Ctrl+U</span></td><td>View page source</td></tr>
             <tr><td><span class="key">Ctrl+I</span></td><td>Show debug info</td></tr>
+            <tr><td><span class="key">Ctrl+Shift+O</span></td><td>Open current page in external browser</td></tr>
         </table>
     </div>
     
@@ -91,6 +102,13 @@
             <tr><td><span class="cmd">:e &lt;url&gt;</span></td><td>Open URL</td></tr>
             <tr><td><span class="cmd">:bd</span></td><td>Close buffer</td></tr>
             <tr><td><span class="cmd">:bn/:bp</span></td><td>Next/previous buffer</td></tr>
+            <tr><td><span class="cmd">:export-html</span></td><td>Export page as HTML snapshot</td></tr>
+            <tr><td><span class="cmd">:export-md</span></td><td>Export page as Markdown</td></tr>
+            <tr><td><span class="cmd">:export-pdf</span></td><td>Export page as PDF</td></tr>
+            <tr><td><span class="cmd">:browser</span></td><td>Open current page in external browser</td></tr>
+            <tr><td><span class="cmd">:browser &lt;name&gt;</span></td><td>Open in specific browser (firefox, chrome, etc.)</td></tr>
+            <tr><td><span class="cmd">:browser-list</span></td><td>List available browsers</td></tr>
+            <tr><td><span class="cmd">:ext</span></td><td>Open current page in external browser (shorthand)</td></tr>
         </table>
     </div>
     
