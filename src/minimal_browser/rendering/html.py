@@ -10,6 +10,14 @@ from typing import Any, Dict
 
 from jinja2 import Environment, FileSystemLoader, Template
 
+# Optional: Import optimized text processor for performance
+try:
+    from ..native import TextProcessor
+
+    _USE_NATIVE_OPTIMIZATION = True
+except ImportError:
+    _USE_NATIVE_OPTIMIZATION = False
+
 
 def _discover_template_dir() -> Path:
     """Return the first available templates directory."""
@@ -54,8 +62,14 @@ def render_template(name: str, context: Dict[str, Any]) -> str:
 def wrap_content_as_html(content: str, query: str) -> str:
     """Wrap plain text content into a styled HTML document."""
 
-    processed = re.sub(r"\*\*(.*?)\*\*", r"<strong>\1</strong>", content)
-    processed = re.sub(r"\*(.*?)\*", r"<em>\1</em>", processed)
+    # Use optimized markdown conversion if available
+    if _USE_NATIVE_OPTIMIZATION:
+        processed = TextProcessor.markdown_to_html(content)
+    else:
+        # Fallback to standard regex
+        processed = re.sub(r"\*\*(.*?)\*\*", r"<strong>\1</strong>", content)
+        processed = re.sub(r"\*(.*?)\*", r"<em>\1</em>", processed)
+
     processed = processed.replace("\n\n", "</p><p>")
     processed = processed.replace("\n", "<br>")
 
@@ -88,5 +102,14 @@ def create_data_url(html_content: str) -> str:
             '<head>\n    <meta charset="UTF-8">',
         )
 
-    encoded_html = base64.b64encode(html_with_charset.encode("utf-8")).decode("ascii")
+    # Use optimized base64 encoding if available
+    if _USE_NATIVE_OPTIMIZATION:
+        encoded_html = TextProcessor.base64_encode_optimized(
+            html_with_charset.encode("utf-8")
+        )
+    else:
+        encoded_html = base64.b64encode(html_with_charset.encode("utf-8")).decode(
+            "ascii"
+        )
+
     return f"data:text/html;charset=utf-8;base64,{encoded_html}"

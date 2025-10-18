@@ -104,9 +104,15 @@ Legend: **Priority** = (High/Medium/Low), **Status** = (Idea ▢ / Planned ◧ /
 
 ## P3 · Long-Term Explorations
 
+### FR-003: Native Module Optimization
+- **Summary:** Investigate and implement native modules (Rust/C++) for performance-critical operations. Research Tauri integration as alternative browser engine.
+- **Priority**: Medium · **Status**: ◧ Planned
+- **Investigation Document**: See `docs/TAURI_INVESTIGATION.md`
+
 ### FR-060: Native Performance Modules
 - **Summary:** Profile hotspots and trial Rust/C++ modules for CPU/GPU-heavy tasks.
-- **Priority:** Low · **Status:** ▢ Idea
+- **Priority:** Medium · **Status:** ◧ Planned
+- **Investigation:** See [INVESTIGATION_TAURI_ENGINE.md](./INVESTIGATION_TAURI_ENGINE.md) for detailed analysis of limiting factors and Tauri integration feasibility. Recommendation: Phased optimization approach using PyO3 for selective hotspots rather than full Tauri migration.
 
 ### FR-061: Persistent Login Cookies
 - **Summary:** Enable long-lived sessions with secure cookie storage.
@@ -118,4 +124,5 @@ Legend: **Priority** = (High/Medium/Low), **Status** = (Idea ▢ / Planned ◧ /
 
 ### FR-063: AI Screenshot Analysis
 - **Summary:** Capture screenshots, feed vision-capable models, return annotations.
-- **Priority:** Medium · **Status:** ▢ Idea
+- **Priority:** Medium · **Status:** ◉ Shipped
+- **Implementation:** Ctrl+Shift+S captures screenshot and prompts for AI vision analysis using GPT-4o

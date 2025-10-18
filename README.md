@@ -2,16 +2,19 @@
 
 Minimal Browser is a vim-inspired Qt WebEngine shell with a built-in AI copilot. It combines modal keyboard navigation, a lightweight UI, and structured AI actions so you can browse, generate content, or perform smart searches without leaving a terminal-style workflow.
 
-> 📄 Looking for a deeper architectural dive? See [`ARCHITECTURE.md`](ARCHITECTURE.md).
+> 📄 Looking for a deeper architectural dive? See [`ARCHITECTURE.md`](ARCHITECTURE.md).  
+> 🔬 Interested in performance optimization and Tauri integration? See [`INVESTIGATION_TAURI_ENGINE.md`](INVESTIGATION_TAURI_ENGINE.md).
 
 ## ✨ Highlights
 
 - **Modal ergonomics:** NORMAL/COMMAND/INSERT modes with familiar vim keybindings.
 - **Native AI assistant:** Structured responses (navigate/search/html) parsed via Pydantic for deterministic actions.
+- **AI vision analysis:** Capture screenshots and analyze them with GPT-4o vision capabilities (Ctrl+Shift+S).
 - **Pluggable engines:** Abstract `WebEngine` contract with a Qt WebEngine implementation today and hooks for GTK/others tomorrow.
 - **Smart rendering:** AI HTML responses rendered via Jinja templates and injected as data URLs for instant previews.
 - **Conversation memory:** Rolling in-memory history plus optional JSON persistence for long-running sessions.
 - **File browser with embeddings:** Browse local files, index with semantic search, and find code/assets using natural language queries.
+- **Performance optimizations:** Optional native (Rust/C) modules for CPU-intensive operations with transparent fallback to pure Python.
 
 ## 🧱 Project Layout
 
@@ -20,10 +23,14 @@ src/minimal_browser/
 ├── ai/                # AI models, schemas, structured agent, parsing logic
 ├── rendering/         # HTML templating + URL/data-URL builders
 ├── engines/           # Web engine abstractions and the Qt implementation
-├── storage/           # Conversation logging, file browser, embeddings
-├── templates/         # HTML templates (AI response, help, file browser)
+├── storage/           # Conversation logging utilities
+├── templates/         # HTML templates (AI response card, help screen)
+├── native/            # Optional native optimizations (Rust/C)
 ├── minimal_browser.py # VimBrowser UI, command palette, AI worker wiring
 └── main.py            # Entry point + environment setup
+
+native_extensions/     # Optional Rust extensions for performance
+benchmarks/            # Performance benchmarks and tests
 ```
 
 ## 🚀 Getting Started
@@ -133,6 +140,38 @@ Minimal Browser includes a built-in file browser with semantic search capabiliti
 ```
 
 For detailed documentation, see [`FILE_BROWSER_DOCS.md`](FILE_BROWSER_DOCS.md).
+## ⚡ Performance Optimizations (Optional)
+
+Minimal Browser includes an optional native module system that accelerates CPU-intensive operations (regex matching, base64 encoding, markdown conversion) using Rust. The system provides 2-10x performance improvements while maintaining transparent fallback to pure Python.
+
+**To enable native optimizations (requires Rust):**
+
+```bash
+# Install Rust if not already installed
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
+# Install maturin (Rust-Python bridge)
+pip install maturin
+
+# Build and install native module
+cd native_extensions
+maturin develop
+cd ..
+```
+
+**Verify it's working:**
+
+```bash
+python3 benchmarks/demo_optimizations.py
+```
+
+**Performance benchmarking:**
+
+```bash
+python3 -m benchmarks.text_processing_benchmark
+```
+
+For detailed information, see [`NATIVE_OPTIMIZATION.md`](NATIVE_OPTIMIZATION.md) and [`benchmarks/README.md`](benchmarks/README.md).
 
 ## 🧭 Current Status & Known Gaps
 
@@ -153,6 +192,7 @@ For a detailed critique and near-term roadmap, see the **Architecture Roadmap** 
 - Configurable AI model routing with health checks
 - Rendering toolkit for richer AI-generated mini-apps
 - Storage enhancements (SQLite/LiteFS) for searchable history
+- **Native module optimization**: Investigation into Tauri and Rust/C++ modules (see `docs/TAURI_INVESTIGATION.md`)
 
 Track progress in [`ROADMAP.md`](ROADMAP.md) and detailed feature ideas in [`FEATURE_REQUESTS.md`](FEATURE_REQUESTS.md).
 

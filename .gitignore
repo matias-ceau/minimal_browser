@@ -11,3 +11,13 @@ wheels/
 
 # Test files
 test_*.py
+# Test files (temporary)
+test_screenshot.py
+
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+coverage.xml
+*.cover

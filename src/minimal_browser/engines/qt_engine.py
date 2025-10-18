@@ -6,7 +6,8 @@ from .base import WebEngine
 try:
     from PySide6.QtWebEngineWidgets import QWebEngineView
     from PySide6.QtWebEngineCore import QWebEngineProfile, QWebEngineSettings
-    from PySide6.QtCore import QUrl
+    from PySide6.QtCore import QUrl, QBuffer, QIODevice
+    from PySide6.QtGui import QImage
     QT_AVAILABLE = True
 except ImportError:
     QT_AVAILABLE = False
@@ -149,6 +150,39 @@ class QtWebEngine(WebEngine):
                 self._dev_tools.show()
         else:
             print("Developer tools not available in this Qt version")
+    
+    def capture_screenshot(self, callback: Callable[[bytes], None]):
+        """Capture a screenshot of the current page asynchronously
+        
+        Args:
+            callback: Function to call with PNG image data as bytes
+        """
+        if not self._widget:
+            print("Cannot capture screenshot: widget not available")
+            callback(b"")
+            return
+        
+        try:
+            # Capture the web view as a pixmap
+            pixmap = self._widget.grab()
+            
+            # Convert pixmap to QImage
+            image = pixmap.toImage()
+            
+            # Convert to PNG bytes
+            buffer = QBuffer()
+            buffer.open(QIODevice.OpenModeFlag.WriteOnly)
+            image.save(buffer, "PNG")
+            
+            # Get the bytes
+            image_bytes = buffer.data().data()
+            buffer.close()
+            
+            print(f"Screenshot captured: {len(image_bytes)} bytes")
+            callback(image_bytes)
+        except Exception as e:
+            print(f"Error capturing screenshot: {e}")
+            callback(b"")
     
     @property
     def engine_name(self) -> str:
