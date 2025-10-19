@@ -2,6 +2,34 @@
 
 This project is a **vim-like browser with native AI integration** built using PySide6 and OpenRouter API. Understanding these architectural patterns is essential for effective development.
 
+## Quick Reference
+
+### Essential Commands
+```bash
+# Setup
+uv sync                                    # Install all dependencies
+
+# Testing
+pytest                                     # Run all tests
+pytest tests/unit/ai/ -v                   # Run specific test suite
+pytest --cov=src/minimal_browser          # Run with coverage
+
+# Code Quality
+ruff format src/                           # Format code
+ruff check src/minimal_browser            # Lint code
+python -m py_compile src/minimal_browser/[file].py  # Syntax check
+
+# Running
+uv run python -m minimal_browser          # Start browser
+uv run python -m minimal_browser [url]    # Start with URL
+```
+
+### When Working on Code
+1. **Always run tests** before and after changes: `pytest tests/unit/[relevant]/`
+2. **Check syntax** after edits: `python -m py_compile [file].py`
+3. **Run linter** to catch issues: `ruff check src/minimal_browser`
+4. **Test manually** for UI changes: `uv run python -m minimal_browser`
+
 ## Core Architecture
 
 ### Engine Abstraction Pattern
@@ -181,3 +209,278 @@ When modifying AI actions, always validate Pydantic schemas compile correctly an
 - Check AI responses in browser developer tools (F12)
 - Monitor console output for encoding/parsing errors
 - Test with different AI models to ensure compatibility
+
+## Testing
+
+### Running Tests
+The project uses **pytest** for testing. Tests are organized in the `tests/` directory:
+
+```bash
+# Run all tests
+pytest
+
+# Run specific test suite
+pytest tests/unit/ai/           # AI module tests
+pytest tests/unit/rendering/    # Rendering module tests
+pytest tests/unit/storage/      # Storage module tests
+
+# Run with verbose output
+pytest -v
+
+# Run with coverage report
+pytest --cov=src/minimal_browser --cov-report=term-missing
+
+# Run tests for a specific file
+pytest tests/unit/ai/test_schemas.py
+```
+
+### Test Structure
+- **tests/unit/**: Unit tests for individual modules
+  - `ai/`: Tests for AI schemas, tools, and response processing
+  - `rendering/`: Tests for HTML rendering and data URL creation
+  - `storage/`: Tests for conversation storage and memory
+- **tests/integration/**: Integration tests (placeholder for future)
+
+### Writing Tests
+When adding new functionality, follow the existing test patterns:
+- Use pytest fixtures defined in `conftest.py`
+- Test both success and error cases
+- Mock external dependencies (OpenRouter API, WebEngine)
+- Keep tests focused and independent
+
+## Linting and Code Quality
+
+### Code Formatting
+Use **ruff** for code formatting and linting:
+
+```bash
+# Format code
+ruff format src/
+
+# Check for linting issues
+ruff check src/minimal_browser
+
+# Check specific error categories (syntax errors, undefined names)
+ruff check src/minimal_browser --select=E9,F63,F7,F82
+```
+
+### Type Checking
+Use **mypy** for static type checking (when available):
+
+```bash
+mypy src/minimal_browser --ignore-missing-imports
+```
+
+### Pre-commit Checklist
+Before committing code changes:
+1. Run syntax validation: `python -m py_compile src/minimal_browser/[modified_file].py`
+2. Run relevant tests: `pytest tests/unit/[relevant_test_dir]/`
+3. Check formatting: `ruff check src/minimal_browser`
+4. Verify imports and type hints are correct
+
+## Common Pitfalls and Gotchas
+
+### Python Version Compatibility
+- **Python 3.13+ required** - Don't use features from older Python versions that have changed
+- PySide6 requires specific Python versions - check compatibility before upgrading
+
+### Qt WebEngine Issues
+- **Headless environments**: Use `QT_QPA_PLATFORM=offscreen` for CI/testing
+- **Wayland compatibility**: Set `QT_QPA_PLATFORM=wayland` on Wayland systems
+- **Profile management**: Always use `QWebEngineProfile.defaultProfile()` patterns
+
+### AI Response Processing
+- **Never skip ResponseProcessor** - All AI responses must go through Pydantic validation
+- **Data URL encoding**: Always use UTF-8 encoding with proper error handling
+- **HTML sanitization**: Be cautious with user-generated HTML content
+
+### Dependencies
+- **ChromaDB compatibility**: Can cause build issues in some environments
+- **uv vs pip**: Prefer `uv` for development, but document pip fallbacks
+- **Native extensions**: Optional Rust extensions should have Python fallbacks
+
+### Git Workflow
+- **Don't force push** - Rebase locally before pushing
+- **Keep commits atomic** - One logical change per commit
+- **Branch naming**: Use `feature/`, `fix/`, `docs/` prefixes
+
+## Build System
+
+### Using uv (Recommended)
+```bash
+# Install dependencies (including dev dependencies)
+uv sync
+
+# Run the browser
+uv run python -m minimal_browser
+
+# Run with custom URL
+uv run python -m minimal_browser https://example.com
+```
+
+### Using pip (Fallback)
+If `uv` is not available:
+```bash
+# Install core dependencies
+pip install pydantic>=2.8.2 pyside6>=6.9.2 openai>=1.107.2 requests>=2.32.5
+
+# Install dev dependencies
+pip install pytest pytest-cov
+
+# Run the browser
+python -m minimal_browser
+```
+
+### Environment Variables
+Required for full functionality:
+- `OPENROUTER_API_KEY`: OpenRouter API key for AI features
+- `QT_QPA_PLATFORM`: Qt platform abstraction (optional, for specific environments)
+
+## Tool Usage Best Practices
+
+### Parallel Tool Calls
+When exploring code or making multiple independent changes, **call tools in parallel**:
+- ✅ Good: Read 3 different files simultaneously
+- ✅ Good: View directory + check git status + read file in one call
+- ❌ Bad: Read files one at a time when they're independent
+
+### Sequential Tool Calls
+When operations depend on previous results, call tools sequentially:
+- ✅ Good: Read file → analyze content → make targeted edit
+- ✅ Good: Run tests → check failures → fix specific issues
+- ❌ Bad: Try to guess file content without reading it first
+
+### File Editing Patterns
+Use `str_replace` for surgical changes:
+- Always include enough context in `old_str` to make it unique
+- When making multiple changes to the same file, call `str_replace` multiple times in sequence
+- Each call applies in order, so later calls see earlier changes
+- For new files, use `create` instead
+
+### Testing Workflow
+1. **Before changes**: Run relevant tests to establish baseline
+2. **After changes**: Run same tests to verify no regressions
+3. **For new features**: Add tests before implementation
+4. **For bugs**: Add failing test, fix bug, verify test passes
+
+## Examples of Successful Contributions
+
+### Example 1: Adding a New AI Action Type
+
+**Context**: User wants to add a `BOOKMARK` action that saves URLs to a file.
+
+**Steps**:
+1. Define schema in `src/minimal_browser/ai/schemas.py`:
+   ```python
+   class BookmarkAction(BaseModel):
+       action_type: Literal["bookmark"] = "bookmark"
+       url: str
+       title: str | None = None
+   ```
+
+2. Update `AIAction` union:
+   ```python
+   AIAction = Union[NavigateAction, SearchAction, HtmlAction, BookmarkAction]
+   ```
+
+3. Add parser in `ResponseProcessor` (`src/minimal_browser/ai/tools.py`):
+   ```python
+   def parse_response(response: str) -> AIAction:
+       if response.startswith("BOOKMARK:"):
+           url = response[9:].strip()
+           return BookmarkAction(url=url)
+   ```
+
+4. Wire handler in `minimal_browser.py`:
+   ```python
+   def execute_ai_action(self, action: AIAction):
+       if isinstance(action, BookmarkAction):
+           self._save_bookmark(action.url, action.title)
+   ```
+
+5. Test:
+   ```bash
+   pytest tests/unit/ai/test_schemas.py
+   python -m minimal_browser  # Manual test
+   ```
+
+### Example 2: Fixing HTML Encoding Issue
+
+**Context**: AI-generated HTML with emoji causes encoding errors.
+
+**Steps**:
+1. Locate the issue: `src/minimal_browser/minimal_browser.py:to_data_url()`
+2. Read existing implementation to understand encoding
+3. Add error handling for problematic characters:
+   ```python
+   try:
+       html_bytes = html.encode("utf-8")
+   except UnicodeEncodeError:
+       html_bytes = html.encode("utf-8", errors="replace")
+   ```
+4. Test with emoji content:
+   ```bash
+   pytest tests/unit/rendering/test_html.py
+   # Manually test with: "Show me a calculator 🧮"
+   ```
+
+### Example 3: Adding Configuration Option
+
+**Context**: User wants to configure default AI model.
+
+**Steps**:
+1. Update `src/minimal_browser/config/default_config.py`:
+   ```python
+   class AIConfig(BaseModel):
+       model: str = "gpt-5-codex-preview"
+       fallback_model: str = "claude-3.5-sonnet"
+       # Add new option
+       default_model: str | None = None
+   ```
+
+2. Add model selection logic in AI client
+3. Update documentation in `README.md` and this file
+4. Test configuration loading:
+   ```bash
+   pytest tests/unit/  # Verify config tests pass
+   ```
+
+## Troubleshooting
+
+### "Module not found" errors
+- Run `uv sync` to install dependencies
+- Check Python version: `python --version` (should be 3.13+)
+- Verify virtual environment is activated
+
+### Tests fail with "WebEngine not available"
+- Tests should work without PySide6 using mocks
+- Check `tests/conftest.py` for proper mocking setup
+- Use `QT_QPA_PLATFORM=offscreen` environment variable
+
+### Linting errors in AI-generated code
+- Run `ruff format src/` to auto-fix formatting
+- Check for unused imports: `ruff check --select F401`
+- Verify type hints are correct: `mypy src/minimal_browser`
+
+### Commits fail or branch is behind
+- Pull latest changes: `git pull origin main`
+- Rebase if needed: `git rebase main`
+- Never force push unless you're certain
+
+## Additional Resources
+
+- **ARCHITECTURE.md**: Detailed technical architecture documentation
+- **CONTRIBUTING.md**: Contributor guidelines and workflow
+- **TESTING.md**: Comprehensive testing documentation
+- **ROADMAP.md**: Future feature planning
+- **pyproject.toml**: Dependency specifications and project metadata
+
+---
+
+**Note for GitHub Copilot**: This project values **minimal, surgical changes** that maintain existing patterns. When suggesting modifications:
+1. Preserve the vim-like modal interface
+2. Maintain Pydantic schema validation for AI responses
+3. Keep the engine abstraction intact
+4. Follow established error handling patterns
+5. Add tests for new functionality
+6. Update documentation when changing public APIs
