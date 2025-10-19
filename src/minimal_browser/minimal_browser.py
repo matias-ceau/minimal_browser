@@ -13,7 +13,16 @@ from typing import MutableMapping, Optional, cast
 
 from PySide6.QtCore import QUrl, Qt, QTimer, QEvent
 from PySide6.QtGui import QKeySequence, QShortcut
-from PySide6.QtWidgets import QMainWindow, QWidget
+from PySide6.QtWidgets import (
+    QMainWindow,
+    QVBoxLayout,
+    QHBoxLayout,
+    QWidget,
+    QLabel,
+    QLineEdit,
+    QSplitter,
+    QTextEdit,
+)
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWebEngineCore import (
     QWebEngineProfile,
@@ -230,6 +239,80 @@ class CommandPalette(QWidget):
             }}
             """
         )
+
+
+class AISidebarWidget(QWidget):
+    """AI Sidebar panel showing conversation history and status"""
+
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("AISidebar")
+        
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        
+        # Header
+        header = QLabel("🤖 AI Assistant")
+        header.setObjectName("SidebarHeader")
+        header.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        header.setFixedHeight(40)
+        
+        # Conversation display area
+        self.conversation_display = QTextEdit()
+        self.conversation_display.setObjectName("ConversationDisplay")
+        self.conversation_display.setReadOnly(True)
+        self.conversation_display.setPlaceholderText(
+            "AI conversation history will appear here.\n\n"
+            "Press Space to start a conversation with the AI assistant."
+        )
+        
+        layout.addWidget(header)
+        layout.addWidget(self.conversation_display)
+        
+        self.setStyleSheet("""
+            #AISidebar {
+                background-color: #1a1a1a;
+                border-left: 1px solid #333;
+            }
+            #SidebarHeader {
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+                font-size: 14px;
+                font-weight: 600;
+                border-bottom: 1px solid #333;
+            }
+            #ConversationDisplay {
+                background-color: #1e1e1e;
+                color: #e0e0e0;
+                border: none;
+                padding: 12px;
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                font-size: 13px;
+                line-height: 1.6;
+            }
+        """)
+    
+    def add_message(self, role: str, content: str) -> None:
+        """Add a message to the conversation display"""
+        cursor = self.conversation_display.textCursor()
+        cursor.movePosition(cursor.MoveOperation.End)
+        
+        # Format the message
+        if role == "user":
+            formatted = f"<div style='margin-bottom: 12px;'><b style='color: #4a9eff;'>You:</b><br/>{html.escape(content)}</div>"
+        elif role == "assistant":
+            formatted = f"<div style='margin-bottom: 12px;'><b style='color: #764ba2;'>AI:</b><br/>{html.escape(content)}</div>"
+        else:
+            formatted = f"<div style='margin-bottom: 12px; color: #888;'><i>{html.escape(content)}</i></div>"
+        
+        cursor.insertHtml(formatted)
+        self.conversation_display.setTextCursor(cursor)
+        self.conversation_display.ensureCursorVisible()
+    
+    def clear_history(self) -> None:
+        """Clear the conversation display"""
+        self.conversation_display.clear()
 
 
 class AIWorker(QThread):
@@ -523,17 +606,48 @@ class VimBrowser(QMainWindow):
         layout.addWidget(self.vim_status)
         self.status_widget.setLayout(layout)
 
-        # Position at bottom
-        container = QWidget()
-        main_layout = QVBoxLayout(container)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(0)
-        main_layout.addWidget(self.browser)
-        main_layout.addWidget(self.status_widget)
+        # Create AI sidebar
+        self.ai_sidebar = AISidebarWidget()
+        self.sidebar_visible = False
+        
+        # Create main splitter for browser and sidebar
+        self.main_splitter = QSplitter(Qt.Orientation.Horizontal)
+        
+        # Create browser container
+        browser_container = QWidget()
+        browser_layout = QVBoxLayout(browser_container)
+        browser_layout.setContentsMargins(0, 0, 0, 0)
+        browser_layout.setSpacing(0)
+        browser_layout.addWidget(self.browser)
+        browser_layout.addWidget(self.status_widget)
+        
+        # Add widgets to splitter
+        self.main_splitter.addWidget(browser_container)
+        self.main_splitter.addWidget(self.ai_sidebar)
+        
+        # Initially hide the sidebar
+        self.ai_sidebar.hide()
+        
+        # Set the splitter as the central widget
+        self.setCentralWidget(self.main_splitter)
+        
+        # Set initial sizes (70% browser, 30% sidebar)
+        BROWSER_SPLITTER_RATIO = 0.7
+        SIDEBAR_SPLITTER_RATIO = 0.3
+        window_width = self.width() if self.width() > 0 else 1000  # Fallback to 1000 if not yet shown
+        browser_size = int(window_width * BROWSER_SPLITTER_RATIO)
+        sidebar_size = int(window_width * SIDEBAR_SPLITTER_RATIO)
+        self.main_splitter.setSizes([browser_size, sidebar_size])
 
-        self.setCentralWidget(container)
-
-    def _init_command_line(self):
+    def resizeEvent(self, event):
+        """Ensure splitter sizes remain proportional on window resize."""
+        super().resizeEvent(event)
+        BROWSER_SPLITTER_RATIO = 0.7
+        SIDEBAR_SPLITTER_RATIO = 0.3
+        window_width = self.width()
+        browser_size = int(window_width * BROWSER_SPLITTER_RATIO)
+        sidebar_size = int(window_width * SIDEBAR_SPLITTER_RATIO)
+        self.main_splitter.setSizes([browser_size, sidebar_size])
         self.command_palette = CommandPalette(self)
         self.command_line = self.command_palette.input
         self.command_palette.hide()
@@ -740,6 +854,10 @@ class VimBrowser(QMainWindow):
         self.ai_stream_buffer = ""
 
         self.conv_memory.add_user(query)
+        
+        # Add user query to sidebar
+        self.ai_sidebar.add_message("user", query)
+        
         self.loading_overlay.setText("🤖 Analyzing request...")
         self.loading_overlay.show()
         self.loading_overlay.raise_()
@@ -814,15 +932,28 @@ class VimBrowser(QMainWindow):
 
         if status != "success":
             self._handle_ai_error(payload)
+            # Log error to sidebar
+            self.ai_sidebar.add_message("system", f"Error: {payload}")
             return
 
         self.conv_memory.add_assistant(payload)
         if self.conversation_log and self.last_query is not None:
             self.conversation_log.append(self.last_query, payload)
 
+        # Add assistant response to sidebar
+        if self.last_query:
+            # Parse the response to show a cleaner version in sidebar
+            try:
+                action = ResponseProcessor.parse_response(payload)
+                action_summary = f"{action.type.upper()}: {str(action)[:100]}{'...' if len(str(action)) > 100 else ''}"
+                self.ai_sidebar.add_message("assistant", action_summary)
+            except (ValueError, StructuredAIError) as exc:
+                print(f"AI response parsing failed in sidebar: {exc}")
+                self.ai_sidebar.add_message("assistant", payload[:200] + "...")
+
         try:
             action = ResponseProcessor.parse_response(payload)
-        except Exception as exc:  # pragma: no cover - defensive fallback
+        except (ValueError, StructuredAIError) as exc:  # pragma: no cover - defensive fallback
             print(f"AI response parsing failed: {exc}")
             action = ResponseProcessor.parse_response(f"HTML:{payload}")
 
@@ -847,6 +978,16 @@ class VimBrowser(QMainWindow):
         status_bar.showMessage(message, timeout)
         QTimer.singleShot(timeout, status_bar.hide)
 
+    def toggle_sidebar(self) -> None:
+        """Toggle the AI sidebar visibility"""
+        self.sidebar_visible = not self.sidebar_visible
+        if self.sidebar_visible:
+            self.ai_sidebar.show()
+            self._show_notification("AI sidebar shown", timeout=2000)
+        else:
+            self.ai_sidebar.hide()
+            self._show_notification("AI sidebar hidden", timeout=2000)
+
     def setup_keybindings(self):
         # Escape key - always goes to normal mode
         QShortcut(QKeySequence("Escape"), self, self.normal_mode)
@@ -857,6 +998,9 @@ class VimBrowser(QMainWindow):
         
         # Show URL history in 'o' mode
         QShortcut(QKeySequence("Ctrl+Space"), self, self.show_url_history)
+        
+        # Toggle AI sidebar
+        QShortcut(QKeySequence("Ctrl+B"), self, self.toggle_sidebar)
 
         # Normal mode shortcuts
         QShortcut(QKeySequence(":"), self, self.command_mode)
