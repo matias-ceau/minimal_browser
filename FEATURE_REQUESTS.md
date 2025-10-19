@@ -1,91 +1,128 @@
-// FEATURE_REQUESTS.md
-
 # Feature Requests
 
-This document tracks individual feature requests as a companion to the roadmap.  
-Each request should translate directly into a GitHub Issue when implemented for better tracking.
+Each feature request below should map to a GitHub Issue before implementation. Keep metadata (priority, status, owners) up to date so the roadmap reflects reality.
+
+Legend: **Priority** = (High/Medium/Low), **Status** = (Idea ▢ / Planned ◧ / In Progress ◑ / Shipped ◉)
 
 ---
 
-## Authentication & Security
+## P0 · Documentation & Onboarding
 
-### FR-001: Persistent Login Cookies
-Enable cookie-based sessions so users stay logged in across browser restarts.  
-**Priority:** High
+### FR-001: Contributor Setup Guide
+- **Summary:** Document environment bootstrap (uv, PySide6 deps, lint/test commands) and add troubleshooting for Wayland/Qt.
+- **Priority:** High · **Status:** ▢ Idea
 
-### FR-002: Password Store Integration
-Integrate with the system password manager (e.g., GNOME Keyring, macOS Keychain, or Windows Credential Manager).  
-**Priority:** High
-
----
-
-## Performance
-
-### FR-003: Native Module Optimization
-Investigate integrating C or Rust modules for CPU-intensive parts of the browser.  
-**Priority:** Medium
+### FR-002: Screen Captures & Walkthroughs
+- **Summary:** Add screenshots/GIFs of modal workflow and AI assistant to README.
+- **Priority:** Medium · **Status:** ▢ Idea
 
 ---
 
-## Architecture & Structure
+## P0 · Testing Baseline
 
-### FR-004: Project Refactor
-Restructure the project to improve separation of concerns.  
-- Dedicated `templates/` folder for HTML/Jinja files  
-- Clearer boundaries between UI, storage, and AI logic  
-**Priority:** Medium
+### FR-010: AI Parsing Smoke Tests
+- **Summary:** Unit-test `ResponseProcessor` heuristic paths (navigate/search/html, malformed prefixes).
+- **Priority:** High · **Status:** ▢ Idea
 
----
+### FR-011: Rendering Utility Tests
+- **Summary:** Cover `rendering.html.ensure_html`, template rendering, and data URL generation.
+- **Priority:** High · **Status:** ▢ Idea
 
-## AI & Tools
-
-### FR-005: Pydantic AI Integration
-Use Pydantic to enforce types and context for AI interactions.  
-**Priority:** Medium
-
-### FR-006: AI Page Screenshot Analysis
-Add ability to screenshot the current page and query the AI about its contents.  
-**Priority:** High
-
-### FR-007: Unicode Bugfix in AI Outputs
-Ensure AI-generated content properly handles Unicode without errors.  
-**Priority:** High
-
----
-
-## Export & Sharing
-
-### FR-008: Page Export Capabilities
-Implement export of any page to:  
-- Markdown  
-- PDF  
-- HTML snapshot  
-**Priority:** High
-
----
-
-## User Interface
-
-### FR-009: Split View with AI Sidebar
-Enable side-by-side browsing and AI assistant panel.  
-**Priority:** Medium
-
-### FR-010: Improved Command Prompt
-Redesign the command prompt to be centered, styled, and icon-based instead of text-only letters.  
-**Priority:** Low
-
----
-
-## File & Bookmark Management
-
-### FR-011: File Browser and Embeddings
-Implement a file browser with embedding capability for code/assets.  
-**Priority:** Medium
-
-### FR-012: Smart Bookmarks (Recall)
-Allow bookmarking of files/snippets/code for cross-context retrieval.  
-**Priority:** High
+### FR-012: CI Pipeline
+- **Summary:** Add GitHub Actions workflow running ruff + unit tests on PRs.
+- **Priority:** Medium · **Status:** ▢ Idea
 
 ### FR-013: Bindings for Installed Browser Apps
-Provide easy bindings to already installed browser apps for system integration.  
-**Priority:** Medium
+- **Summary:** Provide easy bindings to already installed browser apps for system integration.
+- **Priority:** Medium · **Status:** ◉ Shipped
+
+---
+
+## P1 · AI Model Experience
+
+### FR-020: Configurable Model Fallbacks
+- **Summary:** Expose an ordered list of preferred models in config/UI with graceful degradation logging.
+- **Priority:** High · **Status:** ▢ Idea
+
+### FR-021: Model Health Cache
+- **Summary:** Track failing model IDs per session to avoid repeated 400 responses from OpenRouter.
+- **Priority:** Medium · **Status:** ▢ Idea
+
+### FR-022: API Key Vault Integration
+- **Summary:** Support pulling OpenRouter keys from system keychains.
+- **Priority:** Medium · **Status:** ◉ Shipped
+
+---
+
+## P1 · Rendering Toolkit
+
+### FR-030: Webapp Component API
+- **Summary:** Formalize `rendering/webapps.py` with helpers for dashboards, widgets, and interactive mini-app shells.
+- **Priority:** Medium · **Status:** ▢ Idea
+
+### FR-031: Template Library
+- **Summary:** Provide reusable template fragments (cards, timelines, tables) for AI-generated HTML.
+- **Priority:** Medium · **Status:** ▢ Idea
+
+### FR-032: HTML Sanitization Toggle
+- **Summary:** Optional sanitization pass before loading AI HTML (e.g., Bleach).
+- **Priority:** High · **Status:** ▢ Idea
+
+---
+
+## P1 · Security & Privacy
+
+### FR-040: WebEngine Safety Settings UI
+- **Summary:** Allow users to toggle relaxed security flags (LocalContentCanAccessRemoteUrls, XSS auditing) with documentation.
+- **Priority:** High · **Status:** ▢ Idea
+
+### FR-041: HTML Sandbox Mode
+- **Summary:** Load AI HTML in an isolated iframe or sandboxed profile.
+- **Priority:** Medium · **Status:** ▢ Idea
+
+---
+
+## P2 · Storage & Productivity
+
+### FR-050: SQLite Conversation Store
+- **Summary:** Replace JSON log with searchable SQLite (filters, timestamps, export).
+- **Priority:** Medium · **Status:** ▢ Idea
+
+### FR-051: Conversation Export Bundles
+- **Summary:** Export queries/responses as Markdown, HTML, or zip bundles.
+- **Priority:** Medium · **Status:** ▢ Idea
+
+### FR-052: Smart Bookmark Vault
+- **Summary:** Store bookmarks/files/snippets with embedding search and recall interface.
+- **Priority:** Medium · **Status:** ▢ Idea
+
+### FR-053: File Browser with Embeddings
+- **Summary:** Browse local files, index with embeddings, and surface in AI prompts.
+- **Priority:** Low · **Status:** ◉ Shipped
+
+---
+
+## P3 · Long-Term Explorations
+
+### FR-003: Native Module Optimization
+- **Summary:** Investigate and implement native modules (Rust/C++) for performance-critical operations. Research Tauri integration as alternative browser engine.
+- **Priority**: Medium · **Status**: ◧ Planned
+- **Investigation Document**: See `docs/TAURI_INVESTIGATION.md`
+
+### FR-060: Native Performance Modules
+- **Summary:** Profile hotspots and trial Rust/C++ modules for CPU/GPU-heavy tasks.
+- **Priority:** Medium · **Status:** ◧ Planned
+- **Investigation:** See [INVESTIGATION_TAURI_ENGINE.md](./INVESTIGATION_TAURI_ENGINE.md) for detailed analysis of limiting factors and Tauri integration feasibility. Recommendation: Phased optimization approach using PyO3 for selective hotspots rather than full Tauri migration.
+
+### FR-061: Persistent Login Cookies
+- **Summary:** Enable long-lived sessions with secure cookie storage.
+- **Priority:** Low · **Status:** ◉ Shipped
+
+### FR-062: System Password Store Integration
+- **Summary:** Integrate with GNOME Keyring, macOS Keychain, Windows Credential Manager.
+- **Priority:** Medium · **Status:** ◉ Shipped
+
+### FR-063: AI Screenshot Analysis
+- **Summary:** Capture screenshots, feed vision-capable models, return annotations.
+- **Priority:** Medium · **Status:** ◉ Shipped
+- **Implementation:** Ctrl+Shift+S captures screenshot and prompts for AI vision analysis using GPT-4o
