@@ -742,6 +742,22 @@ class VimBrowser(QMainWindow):
             self.completion_candidates = []
 
 
+    def _init_command_line(self):
+        self.command_palette = CommandPalette(self)
+        self.command_line = self.command_palette.input
+        self.command_palette.hide()
+        self.command_line.returnPressed.connect(self.execute_command)
+    def _position_command_palette(self) -> None:
+        if not hasattr(self, "command_palette"):
+            return
+        width = min(480, self.width() - 60)
+        width = max(width, 300)
+        height = self.command_palette.sizeHint().height()
+        self.command_palette.resize(width, height)
+        x = (self.width() - width) // 2
+        y = self.height() - height - 60
+        self.command_palette.move(max(20, x), max(40, y))
+
     def _position_command_palette(self) -> None:
         if not hasattr(self, "command_palette"):
             return
