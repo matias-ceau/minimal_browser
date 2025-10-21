@@ -1,6 +1,6 @@
 # Minimal Browser Architecture & Technical Assessment
 
-> Last updated: 2025-09-25
+> Last updated: 2025-10-21
 
 ## 1. Executive Overview
 
@@ -14,16 +14,17 @@ Minimal Browser is a modal, vim-inspired Qt WebEngine shell with a tightly integ
 ```text
 ┌────────────────────────────────────────────────────────────────┐
 │            Qt UI Layer (PySide6 / VimBrowser class)             │
-│  • Mode handling, command palette, keybindings                  │
+│  • Mode handling, command palette (ui/command_palette.py)       │
 │  • WebEngine view + profile management                          │
 │  • Status overlays, notifications, dev tools                    │
 └──────────────┬──────────────────────────────────────────────────┘
                │ Qt signals / slots
 ┌──────────────▼──────────────────────────────────────────────────┐
 │            Coordination & Background Workers                   │
-│  • AIWorker thread orchestrates requests & streaming updates    │
+│  • AIWorker thread (ui/ai_worker.py) orchestrates requests      │
 │  • ConversationMemory buffers AI dialogue                      │
-│  • Storage (JSON log) persists conversations                    │
+│  • Storage layer persists conversations, bookmarks, files       │
+│  • coordination/ for multi-agent patterns (experimental)        │
 └──────────────┬──────────────────────────────────────────────────┘
                │ AI queries / responses
 ┌──────────────▼──────────────────────────────────────────────────┐
@@ -31,20 +32,22 @@ Minimal Browser is a modal, vim-inspired Qt WebEngine shell with a tightly integ
 │  • StructuredBrowserAgent (pydantic-ai wrapper)                 │
 │  • ResponseProcessor parses model output → AIAction             │
 │  • Models registry (OpenRouter/OpenAI/Anthropic configs)        │
+│  • Authentication via auth.py with keyring support              │
 └──────────────┬──────────────────────────────────────────────────┘
-               │ AIAction objects
+               │ AIAction objects (Navigate/Search/Html/Bookmark)
 ┌──────────────▼──────────────────────────────────────────────────┐
-│                   Rendering Subsystem                          │
+│                   Rendering & Export Subsystem                 │
 │  • rendering/html.py: template discovery & HTML wrapping        │
 │  • rendering/artifacts.py: URLBuilder (search/data URLs)        │
-│  • Future: rendering/webapps.py for complex apps                │
+│  • rendering/webapps.py: complex interactive apps               │
+│  • export/exporter.py: HTML, Markdown, PDF export               │
 └──────────────┬──────────────────────────────────────────────────┘
-               │ URLs / data URLs
+               │ URLs / data URLs / exported files
 ┌──────────────▼──────────────────────────────────────────────────┐
 │                 Engines (pluggable web views)                   │
 │  • engines/base.py abstract contract                           │
 │  • engines/qt_engine.py concrete Qt WebEngine                  │
-│  • Placeholder gtk_engine.py for experimentation               │
+│  • engines/gtk_engine.py for GTK experimentation               │
 └────────────────────────────────────────────────────────────────┘
 ```
 
@@ -59,46 +62,59 @@ Minimal Browser is a modal, vim-inspired Qt WebEngine shell with a tightly integ
 
 ## 4. Key Modules & Responsibilities
 
-| Layer      | Module(s)                                           | Role                                                |
-| ---------- | --------------------------------------------------- | --------------------------------------------------- |
-| UI & Modes | `minimal_browser.VimBrowser`, `CommandPalette`      | Modal UX, keybindings, status reporting             |
-| Engines    | [engines/base.py](engines/base.py), [engines/qt_engine.py](engines/qt_engine.py)           | Abstract + Qt WebEngine implementation              |
-| AI Models  | `ai/models.py`, `ai/structured.py`, `ai/client.py`  | Model registry, structured agent, direct API client |
-| AI Parsing | `ai/tools.py`, `ai/schemas.py`                      | Parse model output into typed actions               |
-| Rendering  | `rendering/html.py`, `rendering/artifacts.py`       | HTML templating, data URL generation, URL resolver  |
-| Storage    | `storage/conversations.py`                          | JSON-based conversation logging with compaction     |
-| Templates  | `templates/ai_response.html`, `templates/help.html` | Stylized AI response rendering                      |
+| Layer        | Module(s)                                                      | Role                                                      |
+| ------------ | -------------------------------------------------------------- | --------------------------------------------------------- |
+| UI & Modes   | `minimal_browser.VimBrowser`, `ui/command_palette.py`          | Modal UX, command palette, keybindings, status reporting  |
+| UI Workers   | `ui/ai_worker.py`                                              | Background thread for AI requests with Qt signals         |
+| Engines      | `engines/base.py`, `engines/qt_engine.py`, `engines/gtk_engine.py` | Abstract contract + Qt/GTK WebEngine implementations |
+| AI Models    | `ai/models.py`, `ai/structured.py`, `ai/client.py`             | Model registry, structured agent, direct API client       |
+| AI Auth      | `ai/auth.py`                                                   | API key management with keyring/environment support       |
+| AI Parsing   | `ai/tools.py`, `ai/schemas.py`                                 | Parse model output into typed actions (Navigate/Search/Html/Bookmark) |
+| Rendering    | `rendering/html.py`, `rendering/artifacts.py`, `rendering/webapps.py` | HTML templating, data URL generation, URL resolver, web apps |
+| Export       | `export/exporter.py`                                           | Page export to HTML, Markdown, and PDF formats            |
+| Storage      | `storage/conversations.py`, `storage/bookmarks.py`, `storage/file_browser.py` | Conversations, bookmarks, file indexing with embeddings |
+| Storage Util | `storage/databases.py`, `storage/keystore.py`, `storage/utils.py` | Database helpers, secure storage, utility functions    |
+| Coordination | `coordination/agentic_struct.py`                               | Multi-agent coordination patterns (experimental)          |
+| Native       | `native/text_processor.py`, `native/profiling.py`              | Optional Rust/C extensions for performance                |
+| Templates    | `templates/ai_response.html`, `templates/help.py`              | Stylized AI response rendering and help system            |
 
 ## 5. Architecture Strengths
 
-* **Structured Responses**: Pydantic-based action schemas enforce predictable AI outputs and enable deterministic UI handling.
+* **Structured Responses**: Pydantic-based action schemas (Navigate, Search, Html, Bookmark) enforce predictable AI outputs and enable deterministic UI handling.
 * **Rendering Separation**: Moving HTML/data URL logic into `rendering/` clarifies the AI parsing layer and prepares for richer templating.
+* **Export Capabilities**: Built-in page export to HTML, Markdown, and PDF via `export/exporter.py` using html2text and WeasyPrint.
 * **Pluggable Engines**: Abstract `WebEngine` contract future-proofs non-Qt implementations (e.g., GTK, headless backends).
-* **Conversation Hygiene**: `ConversationLog` now compacts entries and guards against corrupt log files.
+* **Comprehensive Storage**: Multiple storage backends for conversations, bookmarks, file browsing with semantic search via ChromaDB.
+* **Conversation Hygiene**: `ConversationLog` compacts entries and guards against corrupt log files.
+* **Secure Authentication**: Keyring integration via `ai/auth.py` for secure API key storage across platforms.
 * **Fallback Resilience**: Automatic Claude Sonnet fallback keeps AI features usable when preview models are unavailable.
+* **Command Palette**: Dedicated `ui/command_palette.py` provides consistent command interface across modes.
+* **Test Coverage**: Unit tests in `tests/unit/` cover AI parsing, schemas, rendering, and storage modules.
 
 ## 6. Current Gaps & Critique
 
-1. **Documentation Debt**: README is empty and the roadmap/feature list references pre-refactor structure. No newcomer guide or architecture link.
-2. **Testing Coverage**: No automated tests (unit or integration). AI pipeline and rendering conversions are unverified.
-3. **Error Handling**: Structured fallback paths exist, but high-level UX when AI fails is limited to status messages; no retry UX or offline mode.
-4. **Dependency Footprint**: `pydantic-ai`, `chromadb`, and `boto3` are optional but installed unconditionally; evaluate extras/optional deps for startup time.
-5. **AI Configuration**: Model fallback hardcodes Claude Sonnet; there is no user-configurable hierarchy or caching of availability signals.
-6. **Rendering Extensibility**: `rendering/webapps.py` is a placeholder—no documented pattern for complex interactive experiences.
-7. **Security Posture**: Relaxed WebEngine settings (LocalContentCanAccessRemoteUrls, XSS disabled) lack compensating controls or sandbox explanation.
-8. **Storage Strategy**: Conversation logging remains a single JSON file; no rotation, search, or encryption.
-9. **Build & Tooling**: Recent refactors rely on manual `py_compile`; continuous integration, lint, or packaging checks not enforced.
+1. **Testing Expansion Needed**: Unit tests exist for core modules (AI, rendering, storage) but integration tests and UI testing infrastructure are minimal.
+2. **Error Handling**: Structured fallback paths exist, but high-level UX when AI fails is limited to status messages; no retry UX or offline mode.
+3. **Dependency Footprint**: `pydantic-ai`, `chromadb`, `boto3`, `weasyprint` are optional but installed unconditionally; evaluate extras/optional deps for startup time.
+4. **AI Configuration**: Model fallback hardcodes Claude Sonnet; there is no user-configurable hierarchy or caching of availability signals.
+5. **Rendering Extensibility**: `rendering/webapps.py` exists but lacks documented patterns for complex interactive experiences.
+6. **Security Posture**: Relaxed WebEngine settings (LocalContentCanAccessRemoteUrls, XSS disabled) lack compensating controls or sandbox explanation.
+7. **Storage Strategy**: Conversation logging remains a single JSON file; no rotation, search, or encryption.
+8. **Coordination Module**: `coordination/` directory exists with agent structures but is largely experimental with empty placeholder files.
+9. **Export Documentation**: Export commands (:export-html, :export-md, :export-pdf) exist in code but not well-documented in user guides.
+10. **Build & Tooling**: Continuous integration, lint, or packaging checks not fully enforced; relies on manual verification.
 
 ## 7. Architecture Roadmap (Next 4–6 Weeks)
 
 | Priority | Workstream                     | Description                                                                                                                       |
 | -------- | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
-| P0       | **Documentation Refresh**      | Publish updated README, architecture guide (this file), and contributor onboarding steps. Link from repo root.                    |
-| P0       | **Testing Baseline**           | Add smoke tests for `ResponseProcessor`, `URLBuilder`, and `ConversationLog`. Mock AI responses to ensure deterministic behavior. |
+| P0       | **Documentation Refresh**      | ✓ Updated ARCHITECTURE.md with current module structure. Maintain alignment with code changes through regular reviews.            |
+| P0       | **Testing Expansion**          | Extend existing unit test coverage to integration tests for UI workflows and multi-component interactions.                        |
 | P1       | **Configurable Model Routing** | Expose user-configurable model preferences and fallback order via config file/UI. Cache failed model IDs per session.             |
-| P1       | **Rendering Toolkit**          | Define interfaces and examples for `rendering/webapps.py` (widgets, dashboards). Document templating best practices.              |
+| P1       | **Export Documentation**       | Document export workflow (:export-html, :export-md, :export-pdf) with examples and configuration options.                         |
 | P1       | **Security Review**            | Document rationale for relaxed WebEngine flags, explore sandboxing or toggles for untrusted HTML.                                 |
-| P2       | **Storage Evolution**          | Evaluate SQLite or LiteFS for conversation logs to support search/filter/export.                                                  |
+| P2       | **Storage Evolution**          | Evaluate SQLite or LiteFS for conversation logs to support search/filter/export. Consider encryption for sensitive data.          |
+| P2       | **Coordination Patterns**      | Flesh out `coordination/` module with documented multi-agent patterns and examples.                                               |
 | P2       | **Deployment Story**           | Document packaging (AppImage/Flatpak) and environment constraints (Wayland, GPU).                                                 |
 
 ## 8. Risk Register
