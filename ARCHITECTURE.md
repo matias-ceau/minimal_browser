@@ -132,6 +132,18 @@ Minimal Browser is a modal, vim-inspired Qt WebEngine shell with a tightly integ
 * `ROADMAP.md` / `FEATURE_REQUESTS.md` – feature planning snapshots (pending refresh)
 * `src/minimal_browser/main.py` – entry point enforcing environment settings
 * `src/minimal_browser/minimal_browser.py` – canonical source for mode handling and AI orchestration
+* `scripts/check_docs.py` – documentation health check script for verifying docs are current
+
+### Documentation Maintenance
+
+This architecture document should be kept in sync with major code changes. To help automate verification:
+
+1. **Update date**: Change the "Last updated" timestamp at the top when making significant changes
+2. **Run health checks**: Use `python3 scripts/check_docs.py` to verify documentation completeness
+3. **Review regularly**: Check documentation during release cycles or after adding new modules
+4. **Risk register**: Update the risk register when new architectural concerns emerge
+
+The `check_docs.py` script can be integrated into CI workflows to catch documentation drift automatically.
 
 ---
 

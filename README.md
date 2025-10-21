@@ -265,7 +265,29 @@ Contributions are welcome! If you're planning a sizable change:
 
 1. Open an issue or draft proposal referencing the relevant roadmap/feature entry.
 2. Keep pull requests focused; follow conventional commit guidelines if possible.
-3. Run `uv run python -m py_compile src/minimal_browser/...` before submitting to catch syntax regressions. (Automated tests coming soon.)
+3. Run `python -m py_compile src/minimal_browser/...` before submitting to catch syntax regressions.
+4. Run existing tests with `pytest` to ensure no regressions.
+5. Use `scripts/check_docs.py` to verify documentation is up-to-date.
+
+### Documentation Maintenance
+
+To help keep documentation in sync with the codebase, we provide a documentation health check script:
+
+```bash
+# Check if documentation is up-to-date
+python3 scripts/check_docs.py
+```
+
+This script verifies:
+- All source modules are mentioned in ARCHITECTURE.md
+- Documentation dates are current
+- AI action schemas are documented
+- Major commands are documented
+- Test coverage claims match reality
+
+Run this before major releases or when adding new features to catch documentation drift early.
+
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for detailed contribution guidelines.
 
 ## 📄 License
 
