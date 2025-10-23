@@ -10,26 +10,38 @@ This roadmap summarizes near-term priorities (next 4–6 weeks) and medium-term 
 - Rendering subsystem split (`ai/` parsing vs `rendering/` output)
 - Conversation log compaction and JSON guardrails
 - Automatic Claude Sonnet fallback when OpenRouter preview models fail
+- BookmarkAction schema for AI-driven bookmark management
+- Page export functionality (HTML, Markdown, PDF) via `export/exporter.py`
+- External browser integration for opening pages in system browsers
+- File browser with semantic search using ChromaDB embeddings
+- UI module split with dedicated command palette and AI worker
+- Keyring integration for secure API key storage
+- Unit test coverage for core modules (AI, rendering, storage)
+- Optional native extensions for performance optimization
 
 ## 📌 Active Focus (0–6 Weeks)
 
 ### P0 · Documentation & Onboarding
-- [ ] Polish README with screenshots and quick tasks _(in progress)_
+- [x] Polish README with feature documentation
+- [x] Update `ARCHITECTURE.md` with current module structure (2025-10-21)
+- [ ] Add screenshots demonstrating key features
 - [ ] Publish contributor setup guide (uv, lint/test commands)
-- [ ] Keep `ARCHITECTURE.md` updated with each release
+- [ ] Keep documentation aligned with each release
 
-### P0 · Testing Baseline
-- [ ] Add smoke tests for `ResponseProcessor` parsing heuristics
-- [ ] Add tests for `rendering.html.ensure_html` and `URLBuilder`
+### P0 · Testing Expansion
+- [x] Add unit tests for AI parsing, schemas, rendering, and storage
+- [ ] Add integration tests for multi-component workflows
+- [ ] Add UI testing framework for browser interactions
 - [ ] Configure CI job running `uv run ruff check` + unit tests
 
 ### P1 · AI Model Experience
 - [ ] Expose model selection & fallback order via config/UI
 - [ ] Cache failed model IDs during a session to avoid repeat 400s
-- [ ] Document API key management and rate-limit expectations
+- [x] Document API key management with keyring integration
 
 ### P1 · Rendering Toolkit
-- [ ] Define API for `rendering/webapps.py` (dynamic widgets, dashboards)
+- [x] Create `rendering/webapps.py` module structure
+- [ ] Document API patterns for dynamic widgets and dashboards
 - [ ] Provide reusable template snippets (cards, grids, code blocks)
 - [ ] Document sanitation guidelines for AI-generated HTML
 
@@ -39,21 +51,27 @@ This roadmap summarizes near-term priorities (next 4–6 weeks) and medium-term 
 - [ ] Evaluate CSP or sandbox iframes for generated content
 
 ### P2 · Storage & Productivity
+- [x] Implement bookmark storage with tags and search
+- [x] Implement file browser with ChromaDB embedding search
+- [x] Add page export to HTML, Markdown, and PDF
 - [ ] Prototype SQLite-backed conversation history with search/filter
 - [ ] Export conversations as Markdown/HTML bundles
-- [ ] Sync bookmarks/files with embedding search (ties to `FEATURE_REQUESTS.md` FR-011/012)
+- [ ] Add conversation search and filtering UI
 
 ### P2 · UX Enhancements
+- [x] Implement command palette with visual styling
+- [ ] Add icons and theming to command palette
 - [ ] AI sidebar / split view exploration
-- [ ] Command palette visual refresh (icons, theming)
 - [ ] Inline status overlays for AI streaming feedback
+- [x] External browser integration for cross-browser workflows
 
 ## 🌅 Long-Term Ideas
 
-- Performance profiling and potential native extensions (Rust/C++) - **See `docs/TAURI_INVESTIGATION.md`**
-- Integration with system password stores and persistent login cookies
-- Screenshot capture + vision-enabled AI analysis of the current page
-- Portable packaging (AppImage, Flatpak) with environment auto-detection
+- [x] Performance profiling and native extensions (Rust/C++) - **See `NATIVE_OPTIMIZATION.md`**
+- [x] Screenshot capture + vision-enabled AI analysis - **Implemented with Ctrl+Shift+S**
+- [ ] Integration with system password stores and persistent login cookies
+- [ ] Portable packaging (AppImage, Flatpak) with environment auto-detection
+- [ ] Multi-agent coordination patterns - **Experimental in `coordination/`**
 
 ## 📝 Process Notes
 
