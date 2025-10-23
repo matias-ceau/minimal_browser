@@ -20,17 +20,24 @@ Minimal Browser is a vim-inspired Qt WebEngine shell with a built-in AI copilot.
 
 ```text
 src/minimal_browser/
-├── ai/                # AI models, schemas, structured agent, parsing logic
-├── rendering/         # HTML templating + URL/data-URL builders
-├── engines/           # Web engine abstractions and the Qt implementation
-├── storage/           # Conversation logging utilities
-├── templates/         # HTML templates (AI response card, help screen)
+├── ai/                # AI models, schemas, structured agent, parsing logic, auth
+├── rendering/         # HTML templating, URL/data-URL builders, web apps
+├── engines/           # Web engine abstractions (Qt, GTK implementations)
+├── storage/           # Conversations, bookmarks, file browser, databases
+├── export/            # Page export to HTML, Markdown, PDF
+├── ui/                # Command palette, AI worker threads
+├── coordination/      # Multi-agent coordination patterns (experimental)
 ├── native/            # Optional native optimizations (Rust/C)
-├── minimal_browser.py # VimBrowser UI, command palette, AI worker wiring
+├── config/            # Configuration management and defaults
+├── templates/         # HTML templates (AI response card, help screen)
+├── minimal_browser.py # VimBrowser UI, command execution, AI integration
 └── main.py            # Entry point + environment setup
 
 native_extensions/     # Optional Rust extensions for performance
 benchmarks/            # Performance benchmarks and tests
+tests/                 # Unit and integration tests
+├── unit/              # Unit tests for AI, rendering, storage
+└── integration/       # Integration tests (planned)
 ```
 
 ## 🚀 Getting Started
@@ -140,6 +147,62 @@ Minimal Browser includes a built-in file browser with semantic search capabiliti
 ```
 
 For detailed documentation, see [`FILE_BROWSER_DOCS.md`](FILE_BROWSER_DOCS.md).
+
+## 📑 Page Export
+
+Export the current page to multiple formats:
+
+### Commands
+
+- **`:export-html`** - Save page as HTML file
+- **`:export-md`** or **`:export-markdown`** - Convert page to Markdown
+- **`:export-pdf`** - Save page as PDF document
+
+### Features
+
+- **Automatic file naming**: Exports use sanitized page titles with timestamps
+- **Smart formatting**: Markdown conversion preserves structure via html2text
+- **PDF rendering**: High-quality PDF generation using WeasyPrint
+- **Default location**: Files saved to `~/Downloads` by default
+
+### Example
+
+```bash
+# Export current page as Markdown
+:export-md
+
+# Export as PDF
+:export-pdf
+```
+
+## 🔖 Bookmark Management
+
+Minimal Browser includes a built-in bookmark system with tagging and search capabilities.
+
+### Commands
+
+- **`:bm add [url] [title]`** - Add bookmark (uses current page if no URL provided)
+- **`:bm list [tag]`** - List all bookmarks or filter by tag
+- **`:bm search <query>`** - Search bookmarks by title, URL, or content
+- **`:bm tags`** - Show all available tags
+- **`:bm delete <id>`** - Remove a bookmark
+
+### Features
+
+- **Smart tagging**: Organize bookmarks with multiple tags
+- **Full-text search**: Search across titles, URLs, and content snippets
+- **Metadata storage**: Capture page content and timestamps
+- **Persistent storage**: JSON-backed bookmark database
+
+### External Browser Integration
+
+Open pages in your system's default browser or specific browsers:
+
+- **`:browser`** or **`:ext`** - Open current page in default browser
+- **`:browser firefox`** - Open in Firefox
+- **`:browser chrome`** - Open in Chrome/Chromium
+- **`:browser-list`** - Show available browsers
+
 ## ⚡ Performance Optimizations (Optional)
 
 Minimal Browser includes an optional native module system that accelerates CPU-intensive operations (regex matching, base64 encoding, markdown conversion) using Rust. The system provides 2-10x performance improvements while maintaining transparent fallback to pure Python.
@@ -175,13 +238,13 @@ For detailed information, see [`NATIVE_OPTIMIZATION.md`](NATIVE_OPTIMIZATION.md)
 
 ## 🧭 Current Status & Known Gaps
 
-The codebase is evolving quickly. Key gaps we plan to address next:
+The codebase has evolved significantly with robust core functionality:
 
-1. **Docs & onboarding:** This README and `ARCHITECTURE.md` are brand new—expect further polish, screenshots, and task-based guides.
-2. **Testing baseline:** There is no automated test suite yet. We intend to add smoke tests for AI parsing, rendering helpers, and conversation logging.
-3. **AI UX resiliency:** Errors fall back to notifications; retries and offline modes still need design.
-4. **Security review:** Qt WebEngine settings allow local content to access remote URLs and disable XSS auditing for AI-generated HTML. Documenting and tightening this behavior is on the roadmap.
-5. **Optional dependency slimming:** Packages like `boto3` and `chromadb` are currently hard dependencies even though their integrations are optional.
+1. **Testing**: Unit tests cover core AI parsing, schemas, rendering, and storage modules in `tests/unit/`. Integration tests and UI testing frameworks are planned next.
+2. **AI UX resiliency:** Errors fall back to notifications; retries and offline modes still need design.
+3. **Security review:** Qt WebEngine settings allow local content to access remote URLs and disable XSS auditing for AI-generated HTML. Documenting and tightening this behavior is on the roadmap.
+4. **Optional dependency slimming:** Packages like `boto3`, `chromadb`, and `weasyprint` are currently hard dependencies even though their integrations are optional.
+5. **Coordination module:** The `coordination/` directory contains experimental multi-agent patterns that are not yet production-ready.
 
 For a detailed critique and near-term roadmap, see the **Architecture Roadmap** section in [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
@@ -202,7 +265,29 @@ Contributions are welcome! If you're planning a sizable change:
 
 1. Open an issue or draft proposal referencing the relevant roadmap/feature entry.
 2. Keep pull requests focused; follow conventional commit guidelines if possible.
-3. Run `uv run python -m py_compile src/minimal_browser/...` before submitting to catch syntax regressions. (Automated tests coming soon.)
+3. Run `python -m py_compile src/minimal_browser/...` before submitting to catch syntax regressions.
+4. Run existing tests with `pytest` to ensure no regressions.
+5. Use `scripts/check_docs.py` to verify documentation is up-to-date.
+
+### Documentation Maintenance
+
+To help keep documentation in sync with the codebase, we provide a documentation health check script:
+
+```bash
+# Check if documentation is up-to-date
+python3 scripts/check_docs.py
+```
+
+This script verifies:
+- All source modules are mentioned in ARCHITECTURE.md
+- Documentation dates are current
+- AI action schemas are documented
+- Major commands are documented
+- Test coverage claims match reality
+
+Run this before major releases or when adding new features to catch documentation drift early.
+
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for detailed contribution guidelines.
 
 ## 📄 License
 
