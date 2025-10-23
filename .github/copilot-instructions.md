@@ -578,7 +578,7 @@ Always check `git status` before committing to ensure no unwanted files are stag
 1. Add schema to `src/minimal_browser/ai/schemas.py`
 2. Add to `AIAction` union type
 3. Add parser in `ResponseProcessor`
-4. Add handler in `VimBrowser.execute_ai_action()`
+4. Add handler in `MinimalBrowser.execute_ai_action()`
 5. Add tests in `tests/unit/ai/test_schemas.py`
 
 **Modifying HTML rendering**:
