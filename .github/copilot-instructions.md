@@ -517,7 +517,7 @@ Always check `git status` before committing to ensure no unwanted files are stag
 **API Key Handling**:
 - API keys are loaded from environment variables or system keychain
 - **Never hardcode API keys** in source code
-- **Never commit API keys** to git (check with `git log -p` if unsure)
+- **Never commit API keys** to git (check with `git log --all --full-history -- '*key*'` or `git log -S 'API_KEY' --source --all` if unsure)
 - Use `auth_manager` for secure key storage and retrieval
 
 **HTML Rendering**:
