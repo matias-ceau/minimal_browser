@@ -467,6 +467,71 @@ Use `str_replace` for surgical changes:
 - Rebase if needed: `git rebase main`
 - Never force push unless you're certain
 
+## CI/CD and GitHub Actions
+
+### Automated Testing Workflow
+
+The repository uses GitHub Actions for continuous integration (see `.github/workflows/tests.yml`):
+
+**Test Job (runs on every push/PR)**:
+- Runs unit tests with `pytest tests/unit/ -v`
+- Generates coverage reports with `pytest --cov=src/minimal_browser`
+- Tests are designed to work without PySide6 display for CI environments
+- Uses `QT_QPA_PLATFORM=offscreen` for headless Qt testing
+
+**Lint Job**:
+- Uses `ruff check` for syntax and style validation
+- Focuses on critical errors: E9 (syntax), F63/F7/F82 (undefined names)
+- Targets Python 3.13 compatibility
+
+**Type Check Job**:
+- Uses `mypy` with `--ignore-missing-imports` and `--no-strict-optional`
+- Runs in `continue-on-error` mode (informational only)
+
+**When making changes**:
+- Ensure your code passes the same checks locally before pushing
+- Tests must work without requiring X11/Wayland display
+- Any new dependencies should be reflected in `pyproject.toml`
+
+### Files to Ignore (.gitignore)
+
+Do **not** commit these files:
+- `__pycache__/`, `*.pyc`, `*.pyo` - Python bytecode
+- `build/`, `dist/`, `*.egg-info` - Build artifacts
+- `.venv/` - Virtual environments
+- `.pytest_cache/`, `htmlcov/`, `coverage.xml` - Test artifacts
+- `test_*.py` files in root directory (temporary test files)
+
+Always check `git status` before committing to ensure no unwanted files are staged.
+
+## Security Considerations
+
+### Critical Security Patterns
+
+**Qt WebEngine Configuration**:
+- The browser uses `LocalContentCanAccessRemoteUrls` for AI-generated HTML
+- XSS auditing is disabled to allow dynamic AI content
+- **Never render untrusted user input without sanitization**
+- Data URLs must be properly base64-encoded (UTF-8)
+
+**API Key Handling**:
+- API keys are loaded from environment variables or system keychain
+- **Never hardcode API keys** in source code
+- **Never commit API keys** to git (check with `git log -p` if unsure)
+- Use `auth_manager` for secure key storage and retrieval
+
+**HTML Rendering**:
+- AI-generated HTML is rendered in an isolated context via data URLs
+- Be cautious with user-provided URLs in AI responses
+- Validate URLs before navigation (see `ResponseProcessor.parse_response()`)
+
+### When Adding New Features
+
+- **Authentication**: Always use the `auth_manager` pattern for credentials
+- **User Input**: Validate and sanitize all user input before processing
+- **External Resources**: Be explicit about what external resources are loaded
+- **Error Messages**: Don't expose sensitive information in error messages
+
 ## Additional Resources
 
 - **ARCHITECTURE.md**: Detailed technical architecture documentation
@@ -477,10 +542,69 @@ Use `str_replace` for surgical changes:
 
 ---
 
-**Note for GitHub Copilot**: This project values **minimal, surgical changes** that maintain existing patterns. When suggesting modifications:
-1. Preserve the vim-like modal interface
-2. Maintain Pydantic schema validation for AI responses
-3. Keep the engine abstraction intact
-4. Follow established error handling patterns
-5. Add tests for new functionality
-6. Update documentation when changing public APIs
+## Instructions for GitHub Copilot Coding Agent
+
+**This project values minimal, surgical changes** that maintain existing patterns. When working on issues or making modifications:
+
+### Core Principles
+1. **Preserve the vim-like modal interface** - Don't break existing keybindings or mode switching
+2. **Maintain Pydantic schema validation** for all AI responses
+3. **Keep the engine abstraction intact** - Changes must work with the abstract `WebEngine` interface
+4. **Follow established error handling patterns** - Graceful degradation, not crashes
+5. **Add tests for new functionality** - Use existing test patterns in `tests/unit/`
+6. **Update documentation** when changing public APIs or user-facing features
+
+### Before Making Changes
+1. **Read relevant documentation**: Check ARCHITECTURE.md and CONTRIBUTING.md
+2. **Run existing tests**: `pytest tests/unit/` to establish baseline
+3. **Understand the architecture**: Review the specific module you're modifying
+4. **Check for similar patterns**: Look for existing code that does something similar
+
+### When Implementing Features
+1. **Start small**: Make the minimal change that achieves the goal
+2. **Test iteratively**: Run `pytest` after each logical change
+3. **Follow conventions**: Match the style and patterns in surrounding code
+4. **Avoid scope creep**: Don't refactor unrelated code unless specifically asked
+
+### After Making Changes
+1. **Run all relevant tests**: `pytest tests/unit/[module]/`
+2. **Check syntax**: `python -m py_compile [modified_file].py`
+3. **Run linter**: `ruff check src/minimal_browser`
+4. **Manual verification**: Test the actual functionality in the running browser
+
+### Common Tasks and Patterns
+
+**Adding a new AI action**:
+1. Add schema to `src/minimal_browser/ai/schemas.py`
+2. Add to `AIAction` union type
+3. Add parser in `ResponseProcessor`
+4. Add handler in `VimBrowser.execute_ai_action()`
+5. Add tests in `tests/unit/ai/test_schemas.py`
+
+**Modifying HTML rendering**:
+1. Check `src/minimal_browser/rendering/html.py` for existing functions
+2. Use `create_data_url()` or `to_data_url()` for encoding
+3. Test with emoji and special characters
+4. Verify in actual browser (not just unit tests)
+
+**Adding keybindings**:
+1. Check for conflicts with existing bindings in `minimal_browser.py`
+2. Make bindings mode-aware (NORMAL vs COMMAND vs AI mode)
+3. Add to help screen in `src/minimal_browser/templates/`
+4. Test in actual browser window
+
+### What NOT to Do
+- ❌ Don't add dependencies without checking if they're really needed
+- ❌ Don't remove or modify existing tests (unless fixing incorrect tests)
+- ❌ Don't change the modal interface behavior without discussion
+- ❌ Don't commit commented-out code or debug print statements
+- ❌ Don't change unrelated files as part of your work
+- ❌ Don't force-push to branches (rebase locally instead)
+
+### Error Recovery
+If tests fail after your changes:
+1. **Read the error message carefully** - pytest provides good diagnostics
+2. **Check what changed** - `git diff` to review your modifications
+3. **Isolate the issue** - Run specific test file: `pytest tests/unit/ai/test_schemas.py -v`
+4. **Revert if needed** - `git checkout [file]` to undo changes to a file
+5. **Ask for help** - Comment on the issue if you're stuck
