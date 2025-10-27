@@ -44,8 +44,8 @@ class DocChecker:
                 if path.is_dir() and not path.name.startswith("__"):
                     actual_modules.add(path.name)
         
-        # Check ARCHITECTURE.md mentions all modules
-        arch_file = self.root / "ARCHITECTURE.md"
+        # Check docs/development/ARCHITECTURE.md mentions all modules
+        arch_file = self.root / "docs" / "development" / "ARCHITECTURE.md"
         if arch_file.exists():
             arch_content = arch_file.read_text()
             
@@ -56,18 +56,18 @@ class DocChecker:
             
             if missing_modules:
                 self.issues.append(
-                    f"⚠️  ARCHITECTURE.md missing modules: {', '.join(missing_modules)}"
+                    f"⚠️  docs/development/ARCHITECTURE.md missing modules: {', '.join(missing_modules)}"
                 )
             else:
-                print("✓ All modules documented in ARCHITECTURE.md")
+                print("✓ All modules documented in docs/development/ARCHITECTURE.md")
         else:
-            self.issues.append("❌ ARCHITECTURE.md not found")
+            self.issues.append("❌ docs/development/ARCHITECTURE.md not found")
     
     def check_last_updated(self) -> None:
         """Check if documentation update dates are recent."""
         print("\n📅 Checking last updated dates...")
         
-        arch_file = self.root / "ARCHITECTURE.md"
+        arch_file = self.root / "docs" / "development" / "ARCHITECTURE.md"
         if arch_file.exists():
             content = arch_file.read_text()
             match = re.search(r"Last updated:\s*(\d{4}-\d{2}-\d{2})", content)
@@ -79,12 +79,12 @@ class DocChecker:
                 
                 if days_old > 30:
                     self.issues.append(
-                        f"⚠️  ARCHITECTURE.md last updated {days_old} days ago"
+                        f"⚠️  docs/development/ARCHITECTURE.md last updated {days_old} days ago"
                     )
                 else:
-                    print(f"✓ ARCHITECTURE.md updated {days_old} days ago")
+                    print(f"✓ docs/development/ARCHITECTURE.md updated {days_old} days ago")
             else:
-                self.issues.append("⚠️  ARCHITECTURE.md missing 'Last updated' date")
+                self.issues.append("⚠️  docs/development/ARCHITECTURE.md missing 'Last updated' date")
     
     def check_ai_actions(self) -> None:
         """Verify AI action schemas are documented."""
@@ -107,7 +107,7 @@ class DocChecker:
                         action_classes.append(node.name)
             
             # Check if actions are mentioned in docs
-            arch_file = self.root / "ARCHITECTURE.md"
+            arch_file = self.root / "docs" / "development" / "ARCHITECTURE.md"
             if arch_file.exists():
                 arch_content = arch_file.read_text()
                 

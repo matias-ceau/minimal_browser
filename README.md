@@ -2,8 +2,8 @@
 
 Minimal Browser is a vim-inspired Qt WebEngine shell with a built-in AI copilot. It combines modal keyboard navigation, a lightweight UI, and structured AI actions so you can browse, generate content, or perform smart searches without leaving a terminal-style workflow.
 
-> 📄 Looking for a deeper architectural dive? See [`ARCHITECTURE.md`](ARCHITECTURE.md).  
-> 🔬 Interested in performance optimization and Tauri integration? See [`INVESTIGATION_TAURI_ENGINE.md`](INVESTIGATION_TAURI_ENGINE.md).
+> 📄 Looking for a deeper architectural dive? See [`ARCHITECTURE.md`](docs/development/ARCHITECTURE.md).  
+> 🔬 Interested in performance optimization and Tauri integration? See [`INVESTIGATION_TAURI_ENGINE.md`](docs/planning/INVESTIGATION_TAURI_ENGINE.md).
 
 ## ✨ Highlights
 
@@ -146,7 +146,7 @@ Minimal Browser includes a built-in file browser with semantic search capabiliti
 :search-files authentication middleware
 ```
 
-For detailed documentation, see [`FILE_BROWSER_DOCS.md`](FILE_BROWSER_DOCS.md).
+For detailed documentation, see [`FILE_BROWSER_DOCS.md`](docs/features/FILE_BROWSER_DOCS.md).
 
 ## 📑 Page Export
 
@@ -234,7 +234,7 @@ python3 benchmarks/demo_optimizations.py
 python3 -m benchmarks.text_processing_benchmark
 ```
 
-For detailed information, see [`NATIVE_OPTIMIZATION.md`](NATIVE_OPTIMIZATION.md) and [`benchmarks/README.md`](benchmarks/README.md).
+For detailed information, see [`NATIVE_OPTIMIZATION.md`](docs/features/NATIVE_OPTIMIZATION.md) and [`benchmarks/README.md`](benchmarks/README.md).
 
 ## 🧭 Current Status & Known Gaps
 
@@ -246,7 +246,7 @@ The codebase has evolved significantly with robust core functionality:
 4. **Optional dependency slimming:** Packages like `boto3`, `chromadb`, and `weasyprint` are currently hard dependencies even though their integrations are optional.
 5. **Coordination module:** The `coordination/` directory contains experimental multi-agent patterns that are not yet production-ready.
 
-For a detailed critique and near-term roadmap, see the **Architecture Roadmap** section in [`ARCHITECTURE.md`](ARCHITECTURE.md).
+For a detailed critique and near-term roadmap, see the **Architecture Roadmap** section in [`ARCHITECTURE.md`](docs/development/ARCHITECTURE.md).
 
 ## 🗺️ Roadmap Snapshot
 
@@ -257,7 +257,7 @@ For a detailed critique and near-term roadmap, see the **Architecture Roadmap** 
 - Storage enhancements (SQLite/LiteFS) for searchable history
 - **Native module optimization**: Investigation into Tauri and Rust/C++ modules (see `docs/TAURI_INVESTIGATION.md`)
 
-Track progress in [`ROADMAP.md`](ROADMAP.md) and detailed feature ideas in [`FEATURE_REQUESTS.md`](FEATURE_REQUESTS.md).
+Track progress in [`ROADMAP.md`](docs/planning/ROADMAP.md) and detailed feature ideas in [`FEATURE_REQUESTS.md`](docs/planning/FEATURE_REQUESTS.md).
 
 ## 🤝 Contributing
 
@@ -279,7 +279,7 @@ python3 scripts/check_docs.py
 ```
 
 This script verifies:
-- All source modules are mentioned in ARCHITECTURE.md
+- All source modules are mentioned in docs/development/ARCHITECTURE.md
 - Documentation dates are current
 - AI action schemas are documented
 - Major commands are documented
@@ -287,7 +287,7 @@ This script verifies:
 
 Run this before major releases or when adding new features to catch documentation drift early.
 
-See [`CONTRIBUTING.md`](CONTRIBUTING.md) for detailed contribution guidelines.
+See [`CONTRIBUTING.md`](docs/development/CONTRIBUTING.md) for detailed contribution guidelines.
 
 ## 📄 License
 

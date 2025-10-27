@@ -31,7 +31,7 @@ Successfully implemented FR-053: File Browser with Embeddings for the minimal_br
    - ~13 lines of utility code
 
 ### Documentation
-1. **Feature Documentation** (`FILE_BROWSER_DOCS.md`)
+1. **Feature Documentation** (`docs/features/FILE_BROWSER_DOCS.md`)
    - Comprehensive guide with 188 lines
    - Architecture details, API reference, usage examples
    - Error handling and future enhancement notes
@@ -43,7 +43,7 @@ Successfully implemented FR-053: File Browser with Embeddings for the minimal_br
    - Command reference and example workflow
    - ~49 lines added
 
-3. **Project Status** (`FEATURE_REQUESTS.md`)
+3. **Project Status** (`docs/planning/FEATURE_REQUESTS.md`)
    - Marked FR-053 as "◉ Shipped"
 
 ## Commands Added
@@ -90,7 +90,7 @@ Semantic file search
 
 ## Statistics
 - **Total Lines Added**: ~928 lines across 9 files
-- **New Files Created**: 3 (file_browser.py, file_browser.html, FILE_BROWSER_DOCS.md)
+- **New Files Created**: 3 (file_browser.py, file_browser.html, docs/features/FILE_BROWSER_DOCS.md)
 - **Files Modified**: 6
 - **New Classes**: 3 (FileEntry, FileBrowser, FileIndexer)
 - **New Methods**: 3 (show_file_browser, index_directory, search_indexed_files)
@@ -109,7 +109,7 @@ All dependencies already present in `pyproject.toml`:
 - `jinja2>=3.1.6` - Template rendering
 
 ## Future Enhancements
-Potential improvements from FEATURE_REQUESTS.md:
+Potential improvements from docs/planning/FEATURE_REQUESTS.md:
 - FR-052: Smart Bookmark Vault integration
 - AI context: Surface indexed files in AI prompts
 - File preview: Display file contents in browser
@@ -229,12 +229,12 @@ else:
 ### 5. Documentation
 
 **Files Created/Updated:**
-- `NATIVE_OPTIMIZATION.md` - Comprehensive 262-line guide
+- `docs/features/NATIVE_OPTIMIZATION.md` - Comprehensive 262-line guide
 - `src/minimal_browser/native/README.md` - Integration guide
 - `native_extensions/README.md` - Build instructions
 - `benchmarks/README.md` - Quick start
 - `README.md` - Added performance optimization section
-- `FEATURE_REQUESTS.md` - Marked FR-060 as "In Progress"
+- `docs/planning/FEATURE_REQUESTS.md` - Marked FR-060 as "In Progress"
 
 ## Performance Results
 
@@ -331,7 +331,7 @@ python3 benchmarks/demo_optimizations.py
 ## Related Issues
 
 - FR-003: Native Module Optimization (this implementation)
-- FR-060: Native Performance Modules (FEATURE_REQUESTS.md)
+- FR-060: Native Performance Modules (docs/planning/FEATURE_REQUESTS.md)
 - FR-010: AI Parsing Smoke Tests (testing infrastructure)
 - FR-012: CI Pipeline (future integration)
 

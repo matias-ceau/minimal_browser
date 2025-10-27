@@ -71,7 +71,7 @@ tests/
 
 ### 5. Documentation
 
-#### TESTING.md (10.8 KB)
+#### docs/development/TESTING.md (10.8 KB)
 Comprehensive testing guide covering:
 - Quick start and installation
 - Test organization and structure
@@ -115,9 +115,9 @@ coverage.xml
 *.cover
 ```
 
-#### CONTRIBUTING.md
+#### docs/development/CONTRIBUTING.md
 Updated testing guidelines:
-- Reference to TESTING.md
+- Reference to docs/development/TESTING.md
 - Quick testing workflow
 - Integration with manual testing
 - Priority adjustment (testing infrastructure completed)
@@ -135,7 +135,7 @@ All jobs designed to work in CI environment without display/PySide6.
 
 - **Total test code**: 695 lines
 - **Test files**: 4 main test modules
-- **Documentation**: 14 KB (TESTING.md + tests/README.md)
+- **Documentation**: 14 KB (docs/development/TESTING.md + tests/README.md)
 - **Configuration**: pytest.ini, test runner script, CI workflow
 - **Test markers**: unit, integration, ui, slow, requires_api_key
 
@@ -172,7 +172,7 @@ Tests use conditional imports to handle PySide6 dependency:
 - **Fixtures**: Shared test data
 
 ### 3. Documentation Focus
-- Comprehensive TESTING.md for deep understanding
+- Comprehensive docs/development/TESTING.md for deep understanding
 - Quick README.md for immediate reference
 - Inline docstrings for all test methods
 - Examples and patterns for contributors
@@ -215,7 +215,7 @@ pytest --lf                              # Last failed tests
 ## Next Steps
 
 ### For Contributors
-1. Review TESTING.md for detailed guidelines
+1. Review docs/development/TESTING.md for detailed guidelines
 2. Run `pytest` to verify setup
 3. Add tests for new features
 4. Maintain >80% coverage for new code
@@ -232,16 +232,16 @@ pytest --lf                              # Last failed tests
 ✅ pytest configured with markers and options  
 ✅ Unit tests for critical modules (AI, rendering, storage)  
 ✅ Test runner script for convenience  
-✅ Complete documentation (TESTING.md, README.md)  
+✅ Complete documentation (docs/development/TESTING.md, README.md)  
 ✅ CI/CD workflow ready for GitHub Actions  
 ✅ .gitignore updated for test artifacts  
-✅ CONTRIBUTING.md updated with testing guidelines  
+✅ docs/development/CONTRIBUTING.md updated with testing guidelines  
 
 ## Files Modified/Created
 
 ### New Files (17)
 - `.github/workflows/tests.yml` (GitHub Actions)
-- `TESTING.md` (10.8 KB documentation)
+- `docs/development/TESTING.md` (10.8 KB documentation)
 - `pytest.ini` (pytest configuration)
 - `run_tests.py` (test runner script)
 - `tests/README.md` (quick reference)
@@ -259,7 +259,7 @@ pytest --lf                              # Last failed tests
 ### Modified Files (3)
 - `pyproject.toml` (added dev dependencies)
 - `.gitignore` (added test artifacts)
-- `CONTRIBUTING.md` (updated testing section)
+- `docs/development/CONTRIBUTING.md` (updated testing section)
 
 ## Conclusion
 

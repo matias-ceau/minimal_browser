@@ -71,8 +71,8 @@ Only if:
 
 ## 🔗 Full Documentation
 
-- **Comprehensive Analysis:** [INVESTIGATION_TAURI_ENGINE.md](./INVESTIGATION_TAURI_ENGINE.md)
-- **Summary:** [INVESTIGATION_SUMMARY.md](./INVESTIGATION_SUMMARY.md)
+- **Comprehensive Analysis:** [INVESTIGATION_TAURI_ENGINE.md](../planning/INVESTIGATION_TAURI_ENGINE.md)
+- **Summary:** [INVESTIGATION_SUMMARY.md](../planning/INVESTIGATION_SUMMARY.md)
 - **Profiling Tool:** [scripts/profile_performance.py](./scripts/profile_performance.py)
 
 ## 🚀 Next Actions (This Week)

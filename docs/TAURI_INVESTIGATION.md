@@ -532,7 +532,7 @@ aws = ["boto3>=1.35.0"]
 **Priority 2: Fix Build Issues**
 - Address Python 3.13 AST compatibility in chromadb/pypika
 - Consider pinning to Python 3.12 until dependencies catch up
-- Document workarounds in CONTRIBUTING.md
+- Document workarounds in development/CONTRIBUTING.md
 
 **Priority 3: Profile Current Performance**
 ```python

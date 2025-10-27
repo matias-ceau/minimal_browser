@@ -2,7 +2,7 @@
 
 This roadmap summarizes near-term priorities (next 4–6 weeks) and medium-term initiatives. It is intentionally lean—create GitHub issues for each item before implementation and link back to the relevant section below.
 
-> For architecture context and a deeper critique, read [`ARCHITECTURE.md`](ARCHITECTURE.md).
+> For architecture context and a deeper critique, read [`ARCHITECTURE.md`](../development/ARCHITECTURE.md).
 
 ## ✅ Recently Landed
 
@@ -23,7 +23,7 @@ This roadmap summarizes near-term priorities (next 4–6 weeks) and medium-term 
 
 ### P0 · Documentation & Onboarding
 - [x] Polish README with feature documentation
-- [x] Update `ARCHITECTURE.md` with current module structure (2025-10-21)
+- [x] Update `docs/development/ARCHITECTURE.md` with current module structure (2025-10-21)
 - [ ] Add screenshots demonstrating key features
 - [ ] Publish contributor setup guide (uv, lint/test commands)
 - [ ] Keep documentation aligned with each release
