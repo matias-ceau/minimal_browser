@@ -5,8 +5,8 @@ from __future__ import annotations
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Annotated, Literal, Optional
-from pydantic import BaseModel, Field, StringConstraints
+from typing import Literal, Optional
+from pydantic import BaseModel, Field
 
 from .utils import ensure_dir, read_json, write_json
 

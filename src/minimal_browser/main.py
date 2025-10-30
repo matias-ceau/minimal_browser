@@ -2,7 +2,6 @@
 
 import sys
 import os
-from pathlib import Path
 
 # Fix for Python 3.13 compatibility
 os.environ.setdefault("QT_API", "pyside6")

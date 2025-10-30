@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Dict, Iterable, List, Optional
+from typing import Dict, Iterable, List, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, field_validator
 from pydantic_ai import Agent
 
 from .models import AIModel, DEFAULT_MODEL, get_model
