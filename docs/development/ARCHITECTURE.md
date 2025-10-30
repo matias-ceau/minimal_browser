@@ -129,7 +129,7 @@ Minimal Browser is a modal, vim-inspired Qt WebEngine shell with a tightly integ
 ## 9. References & Related Docs
 
 * `.github/copilot-instructions.md` – in-repo assistant briefing
-* `ROADMAP.md` / `FEATURE_REQUESTS.md` – feature planning snapshots (pending refresh)
+* [ROADMAP.md](../planning/ROADMAP.md) / [FEATURE_REQUESTS.md](../planning/FEATURE_REQUESTS.md) – feature planning snapshots (pending refresh)
 * `src/minimal_browser/main.py` – entry point enforcing environment settings
 * `src/minimal_browser/minimal_browser.py` – canonical source for mode handling and AI orchestration
 * `scripts/check_docs.py` – documentation health check script for verifying docs are current

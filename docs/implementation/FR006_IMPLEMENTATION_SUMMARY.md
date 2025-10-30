@@ -134,7 +134,7 @@ Added user-facing features:
 ## Documentation
 
 ### Created Files
-1. **SCREENSHOT_TESTING.md** (7.3 KB)
+1. **docs/features/SCREENSHOT_TESTING.md** (7.3 KB)
    - Comprehensive testing guide
    - 8 manual test cases
    - Technical architecture details
@@ -173,7 +173,7 @@ Requires live environment with:
 - OpenRouter API key configured
 - Real webpages to test
 
-Manual test cases documented in SCREENSHOT_TESTING.md:
+Manual test cases documented in docs/features/SCREENSHOT_TESTING.md:
 1. Basic screenshot capture
 2. Simple question analysis
 3. Detailed analysis of complex pages
@@ -254,9 +254,9 @@ uv run python -m minimal_browser
 src/minimal_browser/engines/base.py       (+11 lines)
 src/minimal_browser/engines/qt_engine.py  (+30 lines)
 src/minimal_browser/minimal_browser.py    (+202 lines)
-FEATURE_REQUESTS.md                       (+2 lines)
+docs/planning/FEATURE_REQUESTS.md         (+2 lines)
 README.md                                 (+1 line)
-SCREENSHOT_TESTING.md                     (+292 lines, new file)
+docs/features/SCREENSHOT_TESTING.md      (+292 lines, new file)
 .gitignore                                (+3 lines)
 ```
 

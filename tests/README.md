@@ -24,7 +24,7 @@ tests/
 
 ## Running Tests
 
-See [TESTING.md](../TESTING.md) for comprehensive testing documentation.
+See [TESTING.md](../docs/development/TESTING.md) for comprehensive testing documentation.
 
 ### Quick Start
 
@@ -97,4 +97,4 @@ Tests are designed to run in CI/CD environments:
 
 ## Troubleshooting
 
-See [TESTING.md](../TESTING.md#troubleshooting) for common issues and solutions.
+See [TESTING.md](../docs/development/TESTING.md#troubleshooting) for common issues and solutions.

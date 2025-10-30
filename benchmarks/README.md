@@ -87,7 +87,7 @@ With native modules enabled:
 ## Documentation
 
 For more details, see:
-- `../NATIVE_OPTIMIZATION.md` - Complete optimization guide
+- `../docs/features/NATIVE_OPTIMIZATION.md` - Complete optimization guide
 - `../src/minimal_browser/native/README.md` - Integration guide
 - `../native_extensions/README.md` - Rust extension build guide
 

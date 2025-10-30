@@ -86,10 +86,10 @@ python scripts/profile_performance.py --all
 
 ## 🔗 Related Documentation
 
-- **Architecture:** [ARCHITECTURE.md](./ARCHITECTURE.md)
-- **Feature Requests:** [FEATURE_REQUESTS.md](./FEATURE_REQUESTS.md) (see FR-060)
-- **Roadmap:** [ROADMAP.md](./ROADMAP.md)
-- **Contributing:** [CONTRIBUTING.md](./CONTRIBUTING.md)
+- **Architecture:** [ARCHITECTURE.md](../development/ARCHITECTURE.md)
+- **Feature Requests:** [FEATURE_REQUESTS.md](FEATURE_REQUESTS.md) (see FR-060)
+- **Roadmap:** [ROADMAP.md](ROADMAP.md)
+- **Contributing:** [CONTRIBUTING.md](../development/CONTRIBUTING.md)
 
 ## 📅 Investigation Timeline
 

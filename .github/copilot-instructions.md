@@ -202,7 +202,7 @@ When modifying AI actions, always validate Pydantic schemas compile correctly an
 - Follow the established architecture patterns (Engine abstraction, AI pipeline, Modal interface)
 - Test changes against both direct AI integration and fallback scenarios
 - Maintain backward compatibility with existing AI action formats
-- See `CONTRIBUTING.md` for detailed development workflow
+- See `docs/development/CONTRIBUTING.md` for detailed development workflow
 
 ### Debugging Tips
 - Use `python -m py_compile` for syntax validation
@@ -534,10 +534,10 @@ Always check `git status` before committing to ensure no unwanted files are stag
 
 ## Additional Resources
 
-- **ARCHITECTURE.md**: Detailed technical architecture documentation
-- **CONTRIBUTING.md**: Contributor guidelines and workflow
-- **TESTING.md**: Comprehensive testing documentation
-- **ROADMAP.md**: Future feature planning
+- **docs/development/ARCHITECTURE.md**: Detailed technical architecture documentation
+- **docs/development/CONTRIBUTING.md**: Contributor guidelines and workflow
+- **docs/development/TESTING.md**: Comprehensive testing documentation
+- **docs/planning/ROADMAP.md**: Future feature planning
 - **pyproject.toml**: Dependency specifications and project metadata
 
 ---
@@ -555,7 +555,7 @@ Always check `git status` before committing to ensure no unwanted files are stag
 6. **Update documentation** when changing public APIs or user-facing features
 
 ### Before Making Changes
-1. **Read relevant documentation**: Check ARCHITECTURE.md and CONTRIBUTING.md
+1. **Read relevant documentation**: Check docs/development/ARCHITECTURE.md and docs/development/CONTRIBUTING.md
 2. **Run existing tests**: `pytest tests/unit/` to establish baseline
 3. **Understand the architecture**: Review the specific module you're modifying
 4. **Check for similar patterns**: Look for existing code that does something similar

@@ -210,7 +210,7 @@ def main():
     print("DEMO COMPLETE")
     print("=" * 80)
     print("\nFor more details, see:")
-    print("  - NATIVE_OPTIMIZATION.md")
+    print("  - docs/features/NATIVE_OPTIMIZATION.md")
     print("  - src/minimal_browser/native/README.md")
     print("  - native_extensions/README.md")
     print()

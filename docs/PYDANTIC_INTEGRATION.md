@@ -198,6 +198,6 @@ Potential areas for further Pydantic integration:
 
 ## Related Documentation
 
-- [ARCHITECTURE.md](../ARCHITECTURE.md) - Overall architecture patterns
-- [CONTRIBUTING.md](../CONTRIBUTING.md) - Development guidelines
+- [ARCHITECTURE.md](development/ARCHITECTURE.md) - Overall architecture patterns
+- [CONTRIBUTING.md](development/CONTRIBUTING.md) - Development guidelines
 - [Pydantic Documentation](https://docs.pydantic.dev/) - Official Pydantic docs

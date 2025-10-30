@@ -156,7 +156,7 @@ If you're working with GitHub Copilot or another AI assistant that suggests modi
    cat src/minimal_browser/[relevant_file].py
    
    # Check related architecture documentation
-   grep -n "relevant_pattern" ARCHITECTURE.md
+   grep -n "relevant_pattern" ../ARCHITECTURE.md
    ```
 
 3. **Evaluate against project patterns**
@@ -309,7 +309,7 @@ When making changes, keep these patterns in mind:
 - **Modal Interface**: Preserve vim-like keybinding conventions
 - **Data URLs**: Use the established pattern for AI-generated HTML
 
-See `ARCHITECTURE.md` for detailed architectural guidelines.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed architectural guidelines.
 
 ## 🔧 Troubleshooting
 
@@ -377,9 +377,9 @@ git push origin main
 ### Getting Help
 
 1. **Check existing documentation**:
-   - `README.md` for basic setup
-   - `ARCHITECTURE.md` for technical details  
-   - `FEATURE_REQUESTS.md` for planned features
+   - `../../README.md` for basic setup
+   - [ARCHITECTURE.md](ARCHITECTURE.md) for technical details  
+   - [FEATURE_REQUESTS.md](../planning/FEATURE_REQUESTS.md) for planned features
 
 2. **Search existing issues** on GitHub
 
