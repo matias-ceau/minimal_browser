@@ -29,7 +29,7 @@ src/minimal_browser/
 
 ### Prerequisites
 
-- Python **3.13** (project managed with [uv](https://docs.astral.sh/uv/))
+- Python **3.12+** (project managed with [uv](https://docs.astral.sh/uv/))
 - Qt WebEngine runtime (installed automatically with `PySide6` via uv)
 - An **OpenRouter** API key in your environment (`OPENROUTER_API_KEY`)
 
@@ -60,7 +60,7 @@ To override the model, adjust the config returned by `AppConfig` (see `src/minim
 The codebase is evolving quickly. Key gaps we plan to address next:
 
 1. **Docs & onboarding:** This README and `ARCHITECTURE.md` are brand new—expect further polish, screenshots, and task-based guides.
-2. **Testing baseline:** There is no automated test suite yet. We intend to add smoke tests for AI parsing, rendering helpers, and conversation logging.
+2. **Testing baseline:** Unit tests exist for AI parsing, rendering, and storage (58 tests). Integration tests and UI component tests are planned.
 3. **AI UX resiliency:** Errors fall back to notifications; retries and offline modes still need design.
 4. **Security review:** Qt WebEngine settings allow local content to access remote URLs and disable XSS auditing for AI-generated HTML. Documenting and tightening this behavior is on the roadmap.
 5. **Optional dependency slimming:** Packages like `boto3` and `chromadb` are currently hard dependencies even though their integrations are optional.
