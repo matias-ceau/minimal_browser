@@ -5,13 +5,11 @@ import os
 import sys
 import html
 import base64
-import webbrowser
-import uuid
 import requests  # type: ignore[import-untyped]
 from typing import MutableMapping, Optional, cast
 
 
-from PySide6.QtCore import QUrl, Qt, QTimer, QEvent
+from PySide6.QtCore import QUrl, Qt, QTimer, QThread, Signal as pyqtSignal
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QMainWindow,
@@ -20,8 +18,6 @@ from PySide6.QtWidgets import (
     QWidget,
     QLabel,
     QLineEdit,
-    QSplitter,
-    QTextEdit,
 )
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWebEngineCore import (
@@ -32,15 +28,11 @@ from PySide6.QtWebEngineCore import (
 
 from .engines.qt_engine import QtWebEngine
 from .ai.schemas import AIAction, ConversationMemory
+from .ai.prompts import get_browser_assistant_prompt
+from .ai.structured import StructuredBrowserAgent, StructuredAIError
 from .ai.tools import ResponseProcessor
 from .rendering.artifacts import URLBuilder
-from .rendering.html import render_template, create_data_url
 from .storage.conversations import ConversationLog
-from .export.exporter import PageExporter
-from .templates import get_help_content
-from .config.default_config import DEFAULT_CONFIG
-from .ui import CommandPalette, AIWorker
-from .storage.bookmarks import BookmarkStore, Bookmark
 
 
 def to_data_url(html: str) -> str:
@@ -66,55 +58,33 @@ COMMAND_PROMPT_STYLES: dict[str, dict[str, str]] = {
         "icon": "⌨️",
         "label": "Command Mode",
         "placeholder": "Run a Vim command (e.g. :help)",
-        "bg_color": "rgba(30, 30, 50, 220)",
-        "border_color": "rgba(100, 100, 180, 0.3)",
     },
     "/": {
         "icon": "🔍",
         "label": "Find in Page",
         "placeholder": "Search the current page",
-        "bg_color": "rgba(30, 50, 30, 220)",
-        "border_color": "rgba(100, 180, 100, 0.3)",
     },
     "o ": {
         "icon": "🌐",
         "label": "Open URL",
         "placeholder": "Enter a URL to visit",
-        "bg_color": "rgba(20, 30, 40, 220)",
-        "border_color": "rgba(80, 120, 180, 0.3)",
     },
     "s ": {
         "icon": "🧭",
         "label": "Smart Search",
         "placeholder": "Search the web with context",
-        "bg_color": "rgba(40, 30, 20, 220)",
-        "border_color": "rgba(180, 140, 100, 0.3)",
     },
     "a ": {
         "icon": "🤖",
         "label": "AI Search",
         "placeholder": "Ask the AI to find information",
-        "bg_color": "rgba(50, 20, 50, 220)",
-        "border_color": "rgba(180, 100, 180, 0.3)",
     },
     "🤖 ": {
         "icon": "💬",
         "label": "AI Chat",
         "placeholder": "Chat with the AI assistant",
-        "bg_color": "rgba(40, 20, 40, 220)",
-        "border_color": "rgba(160, 80, 160, 0.3)",
-    },
-    "📷 ": {
-        "icon": "📸",
-        "label": "Screenshot Analysis",
-        "placeholder": "Ask a question about the screenshot",
-        "bg_color": "rgba(30, 40, 50, 220)",
-        "border_color": "rgba(100, 140, 180, 0.3)",
     },
 }
-
-# Ordered list of command prompt modes for cycling
-COMMAND_PROMPT_ORDER = [":", "/", "o ", "s ", "a "]
 
 
 class CommandPalette(QWidget):
@@ -195,124 +165,11 @@ class CommandPalette(QWidget):
                 "icon": "⌨️",
                 "label": "Command Mode",
                 "placeholder": "Type a command",
-                "bg_color": "rgba(20, 20, 20, 220)",
-                "border_color": "rgba(255, 255, 255, 0.12)",
             }
         self.icon_label.setText(style["icon"])
         self.mode_label.setText(style["label"])
         self.input.setPlaceholderText(style["placeholder"])
         self.input.clear()
-        
-        # Update dynamic colors
-        bg_color = style.get("bg_color", "rgba(20, 20, 20, 220)")
-        border_color = style.get("border_color", "rgba(255, 255, 255, 0.12)")
-        
-        self.setStyleSheet(
-            f"""
-            #CommandPalette {{
-                background-color: {bg_color};
-                border-radius: 12px;
-                border: 1px solid {border_color};
-            }}
-            #CommandLabel {{
-                color: rgba(255, 255, 255, 0.8);
-                font-size: 12px;
-                font-weight: 600;
-                letter-spacing: 1.1px;
-                text-transform: uppercase;
-            }}
-            #CommandIcon {{
-                font-size: 18px;
-            }}
-            #CommandInput {{
-                background-color: rgba(255, 255, 255, 0.07);
-                border: 1px solid rgba(255, 255, 255, 0.12);
-                border-radius: 10px;
-                color: #ffffff;
-                font-size: 14px;
-                padding: 10px 14px;
-                selection-background-color: rgba(118, 75, 162, 0.6);
-            }}
-            #CommandInput:focus {{
-                border: 1px solid rgba(134, 84, 204, 0.8);
-                background-color: rgba(255, 255, 255, 0.12);
-            }}
-            """
-        )
-
-
-class AISidebarWidget(QWidget):
-    """AI Sidebar panel showing conversation history and status"""
-
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
-        super().__init__(parent)
-        self.setObjectName("AISidebar")
-        
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
-        
-        # Header
-        header = QLabel("🤖 AI Assistant")
-        header.setObjectName("SidebarHeader")
-        header.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        header.setFixedHeight(40)
-        
-        # Conversation display area
-        self.conversation_display = QTextEdit()
-        self.conversation_display.setObjectName("ConversationDisplay")
-        self.conversation_display.setReadOnly(True)
-        self.conversation_display.setPlaceholderText(
-            "AI conversation history will appear here.\n\n"
-            "Press Space to start a conversation with the AI assistant."
-        )
-        
-        layout.addWidget(header)
-        layout.addWidget(self.conversation_display)
-        
-        self.setStyleSheet("""
-            #AISidebar {
-                background-color: #1a1a1a;
-                border-left: 1px solid #333;
-            }
-            #SidebarHeader {
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                color: white;
-                font-size: 14px;
-                font-weight: 600;
-                border-bottom: 1px solid #333;
-            }
-            #ConversationDisplay {
-                background-color: #1e1e1e;
-                color: #e0e0e0;
-                border: none;
-                padding: 12px;
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-                font-size: 13px;
-                line-height: 1.6;
-            }
-        """)
-    
-    def add_message(self, role: str, content: str) -> None:
-        """Add a message to the conversation display"""
-        cursor = self.conversation_display.textCursor()
-        cursor.movePosition(cursor.MoveOperation.End)
-        
-        # Format the message
-        if role == "user":
-            formatted = f"<div style='margin-bottom: 12px;'><b style='color: #4a9eff;'>You:</b><br/>{html.escape(content)}</div>"
-        elif role == "assistant":
-            formatted = f"<div style='margin-bottom: 12px;'><b style='color: #764ba2;'>AI:</b><br/>{html.escape(content)}</div>"
-        else:
-            formatted = f"<div style='margin-bottom: 12px; color: #888;'><i>{html.escape(content)}</i></div>"
-        
-        cursor.insertHtml(formatted)
-        self.conversation_display.setTextCursor(cursor)
-        self.conversation_display.ensureCursorVisible()
-    
-    def clear_history(self) -> None:
-        """Clear the conversation display"""
-        self.conversation_display.clear()
 
 
 class AIWorker(QThread):
@@ -327,19 +184,15 @@ class AIWorker(QThread):
         query: str,
         current_url: str = "",
         history: Optional[list[dict[str, str]]] = None,
-        screenshot_data: Optional[bytes] = None,
     ):
         super().__init__()
         self.query = query
         self.current_url = current_url
         self.history = list(history or [])
-        self.screenshot_data = screenshot_data
 
     def run(self):
         try:
             print(f"AI Worker starting for query: {self.query}")
-            if self.screenshot_data:
-                print(f"Screenshot included: {len(self.screenshot_data)} bytes")
             self.progress_update.emit("Analyzing request...")
 
             response = self.get_ai_response(self.query, self.current_url)
@@ -352,10 +205,6 @@ class AIWorker(QThread):
 
     def get_ai_response(self, query: str, current_url: str) -> str:
         """Get a structured AI response using pydantic-ai."""
-        # For screenshot queries, use a direct API call instead of structured agent
-        if self.screenshot_data:
-            return self._get_vision_response(query, current_url)
-        
         system_prompt = get_browser_assistant_prompt(current_url)
         agent = StructuredBrowserAgent(
             system_prompt=system_prompt,
@@ -385,84 +234,10 @@ class AIWorker(QThread):
         self.streaming_chunk.emit(summary)
 
         return f"{prefix}{payload}"
-    
-    def _get_vision_response(self, query: str, current_url: str) -> str:
-        """Get an AI response with vision capabilities for screenshot analysis."""
-        import base64
-        from .ai.auth import auth_manager
-        
-        # Encode screenshot as base64
-        screenshot_base64 = base64.b64encode(self.screenshot_data).decode('utf-8')
-        
-        self.progress_update.emit("Analyzing screenshot with vision model…")
-        
-        # Use OpenRouter with a vision-capable model
-        api_key = auth_manager.get_key("openrouter")
-        if not api_key:
-            raise Exception("OpenRouter API key not found")
-        
-        # Build the messages with image
-        system_prompt = f"You are analyzing a screenshot of a webpage. The page URL is: {current_url or 'unknown'}"
-        
-        messages = [
-            {"role": "system", "content": system_prompt},
-        ]
-        
-        # Add conversation history if available
-        for msg in self.history[-5:]:  # Last 5 messages for context
-            messages.append(msg)
-        
-        # Add the user query with image
-        messages.append({
-            "role": "user",
-            "content": [
-                {
-                    "type": "text",
-                    "text": query
-                },
-                {
-                    "type": "image_url",
-                    "image_url": {
-                        "url": f"data:image/png;base64,{screenshot_base64}"
-                    }
-                }
-            ]
-        })
-        
-        # Call OpenRouter API with a vision model
-        api_url = "https://openrouter.ai/api/v1/chat/completions"
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        }
-        
-        # Use GPT-4 Vision or Claude 3.5 Sonnet (both support vision)
-        data = {
-            "model": "openai/gpt-4o",  # GPT-4o has vision capabilities
-            "messages": messages,
-            "max_tokens": 2000,
-        }
-        
-        response = requests.post(api_url, headers=headers, json=data)
-        response.raise_for_status()
-        
-        result = response.json()
-        content = result.get("choices", [{}])[0].get("message", {}).get("content", "")
-        
-        if not content:
-            raise Exception("No response from vision model")
-        
-        self.streaming_chunk.emit(f"ANALYSIS: {content[:160]}")
-        
-        # Return as HTML content
-        return f"HTML:{content}"
-# Load UI configuration
-COMMAND_PROMPT_STYLES = DEFAULT_CONFIG.ui.command_prompt_styles
-COMMAND_PROMPT_ORDER = DEFAULT_CONFIG.ui.command_prompt_order
 
 
 class VimBrowser(QMainWindow):
-    def __init__(self, conversation_log: ConversationLog, bookmark_store=None, headless: bool = False):
+    def __init__(self, conversation_log: ConversationLog, headless: bool = False):
         super().__init__()
         # Fix for Python 3.13 compatibility and Wayland envs
         OS_ENV.setdefault("QT_API", "pyside6")
@@ -480,30 +255,10 @@ class VimBrowser(QMainWindow):
         self.current_ai_mode: str = "chat"
         self.ai_stream_buffer: str = ""
         self.conversation_log = conversation_log
-        self.bookmark_store = bookmark_store
         self.conv_memory: ConversationMemory = ConversationMemory()
         self.engine = QtWebEngine() if not headless else None
         self._dev_tools_window: Optional[QWebEngineView] = None
         self.initial_load = True
-        
-        # Command completion state
-        self.available_commands = [
-            "q", "quit", "w", "write", "wq", "help", "h",
-            "e ", "b", "bd", "bn", "bp",
-            "browser", "browser-list", "browser ", "ext", "external",
-            "files", "files ", "fb", "fb ", "index", "index ", "search-files ",
-            "bm", "bm ", "bm add", "bm list", "bm search", "bm del", "bm tags",
-        ]
-        self.completion_index = -1
-        self.completion_candidates: list[str] = []
-        
-        # URL history for 'o' prompt suggestions
-        self.url_history: list[str] = []
-        self.url_history_max = 50  # Keep last 50 URLs
-        
-        # Screenshot analysis state
-        self._pending_screenshot: Optional[bytes] = None
-        
         self._init_ai_overlay()
         self._init_profile_and_browser()
         self._init_status_bar()
@@ -547,8 +302,7 @@ class VimBrowser(QMainWindow):
         self.loading_overlay.raise_()
 
     def _init_profile_and_browser(self):
-        # Use a named profile for persistent cookies and storage
-        self.profile = QWebEngineProfile("minimal-browser", self)
+        self.profile = QWebEngineProfile()
         self.profile.setPersistentCookiesPolicy(
             QWebEngineProfile.PersistentCookiesPolicy.ForcePersistentCookies
         )
@@ -606,157 +360,21 @@ class VimBrowser(QMainWindow):
         layout.addWidget(self.vim_status)
         self.status_widget.setLayout(layout)
 
-        # Create AI sidebar
-        self.ai_sidebar = AISidebarWidget()
-        self.sidebar_visible = False
-        
-        # Create main splitter for browser and sidebar
-        self.main_splitter = QSplitter(Qt.Orientation.Horizontal)
-        
-        # Create browser container
-        browser_container = QWidget()
-        browser_layout = QVBoxLayout(browser_container)
-        browser_layout.setContentsMargins(0, 0, 0, 0)
-        browser_layout.setSpacing(0)
-        browser_layout.addWidget(self.browser)
-        browser_layout.addWidget(self.status_widget)
-        
-        # Add widgets to splitter
-        self.main_splitter.addWidget(browser_container)
-        self.main_splitter.addWidget(self.ai_sidebar)
-        
-        # Initially hide the sidebar
-        self.ai_sidebar.hide()
-        
-        # Set the splitter as the central widget
-        self.setCentralWidget(self.main_splitter)
-        
-        # Set initial sizes (70% browser, 30% sidebar)
-        BROWSER_SPLITTER_RATIO = 0.7
-        SIDEBAR_SPLITTER_RATIO = 0.3
-        window_width = self.width() if self.width() > 0 else 1000  # Fallback to 1000 if not yet shown
-        browser_size = int(window_width * BROWSER_SPLITTER_RATIO)
-        sidebar_size = int(window_width * SIDEBAR_SPLITTER_RATIO)
-        self.main_splitter.setSizes([browser_size, sidebar_size])
+        # Position at bottom
+        container = QWidget()
+        main_layout = QVBoxLayout(container)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+        main_layout.addWidget(self.browser)
+        main_layout.addWidget(self.status_widget)
 
-    def resizeEvent(self, event):
-        """Ensure splitter sizes remain proportional on window resize."""
-        super().resizeEvent(event)
-        BROWSER_SPLITTER_RATIO = 0.7
-        SIDEBAR_SPLITTER_RATIO = 0.3
-        window_width = self.width()
-        browser_size = int(window_width * BROWSER_SPLITTER_RATIO)
-        sidebar_size = int(window_width * SIDEBAR_SPLITTER_RATIO)
-        self.main_splitter.setSizes([browser_size, sidebar_size])
-        self.command_palette = CommandPalette(self)
-        self.command_line = self.command_palette.input
-        self.command_palette.hide()
-        self.command_line.returnPressed.connect(self.execute_command)
-        
-        # Install event filter for Tab key completion
-        self.command_line.installEventFilter(self)
-        
-        # Reset completion state when text changes
-        self.command_line.textChanged.connect(self.reset_completion)
-
-    def eventFilter(self, obj, event):
-        """Handle Tab key for command completion in command line."""
-        if obj == self.command_line and event.type() == event.Type.KeyPress:
-            if event.key() == Qt.Key.Key_Tab:
-                self.handle_command_completion()
-                return True
-        return super().eventFilter(obj, event)
-
-    def handle_command_completion(self):
-        """Handle Tab key command completion for : mode and URL suggestions for o mode."""
-        current_text = self.command_line.text()
-        
-        # Handle command completion for : mode
-        if self.active_command_prefix == ":":
-            # If we're cycling through completions, continue
-            if self.completion_candidates and self.completion_index >= 0:
-                self.completion_index = (self.completion_index + 1) % len(self.completion_candidates)
-                self.command_line.setText(self.completion_candidates[self.completion_index])
-                return
-            
-            # Find matching commands
-            self.completion_candidates = [
-                cmd for cmd in self.available_commands 
-                if cmd.startswith(current_text)
-            ]
-            
-            if not self.completion_candidates:
-                # No matches, reset
-                self.completion_index = -1
-                return
-            
-            if len(self.completion_candidates) == 1:
-                # Single match, complete it
-                self.command_line.setText(self.completion_candidates[0])
-                self.completion_index = -1
-                self.completion_candidates = []
-            else:
-                # Multiple matches, start cycling
-                self.completion_index = 0
-                self.command_line.setText(self.completion_candidates[0])
-        
-        # Handle URL history completion for 'o' mode
-        elif self.active_command_prefix == "o ":
-            # If we're cycling through completions, continue
-            if self.completion_candidates and self.completion_index >= 0:
-                self.completion_index = (self.completion_index + 1) % len(self.completion_candidates)
-                self.command_line.setText(self.completion_candidates[self.completion_index])
-                return
-            
-            # Find matching URLs from history
-            if current_text:
-                self.completion_candidates = [
-                    url for url in self.url_history 
-                    if current_text.lower() in url.lower()
-                ]
-            else:
-                # No text, show recent URLs
-                self.completion_candidates = self.url_history[:10]
-            
-            if not self.completion_candidates:
-                self.completion_index = -1
-                return
-            
-            if len(self.completion_candidates) == 1:
-                # Single match, complete it
-                self.command_line.setText(self.completion_candidates[0])
-                self.completion_index = -1
-                self.completion_candidates = []
-            else:
-                # Multiple matches, start cycling
-                self.completion_index = 0
-                self.command_line.setText(self.completion_candidates[0])
-
-    def reset_completion(self):
-        """Reset command completion state when text changes."""
-        # Only reset if we're not in the middle of Tab cycling
-        if not self.command_line.hasFocus():
-            return
-        # Don't reset during Tab completion
-        if self.completion_index < 0:
-            self.completion_candidates = []
-
+        self.setCentralWidget(container)
 
     def _init_command_line(self):
         self.command_palette = CommandPalette(self)
         self.command_line = self.command_palette.input
         self.command_palette.hide()
         self.command_line.returnPressed.connect(self.execute_command)
-    def _position_command_palette(self) -> None:
-        if not hasattr(self, "command_palette"):
-            return
-        width = min(480, self.width() - 60)
-        width = max(width, 300)
-        height = self.command_palette.sizeHint().height()
-        self.command_palette.resize(width, height)
-        x = (self.width() - width) // 2
-        y = self.height() - height - 60
-        self.command_palette.move(max(20, x), max(40, y))
 
     def _position_command_palette(self) -> None:
         if not hasattr(self, "command_palette"):
@@ -870,57 +488,9 @@ class VimBrowser(QMainWindow):
         self.ai_stream_buffer = ""
 
         self.conv_memory.add_user(query)
-        
-        # Add user query to sidebar
-        self.ai_sidebar.add_message("user", query)
-        
         self.loading_overlay.setText("🤖 Analyzing request...")
         self.loading_overlay.show()
         self.loading_overlay.raise_()
-
-        worker.start()
-    
-    def _start_screenshot_analysis(self, query: str) -> None:
-        """Start AI analysis of the captured screenshot."""
-        query = query.strip()
-        if not query:
-            self._show_notification("Screenshot analysis requires a question", timeout=2500)
-            return
-        
-        if not hasattr(self, "_pending_screenshot") or not self._pending_screenshot:
-            self._show_notification("No screenshot available", timeout=2500)
-            return
-
-        if self.ai_worker and self.ai_worker.isRunning():
-            self._show_notification("AI is already processing a request", timeout=2500)
-            return
-
-        current_url = self._current_url()
-        history = self.conv_memory.as_history()
-        
-        # Create worker with screenshot data
-        worker = AIWorker(
-            query, 
-            current_url=current_url, 
-            history=history,
-            screenshot_data=self._pending_screenshot
-        )
-        worker.response_ready.connect(self._on_ai_response_ready)
-        worker.progress_update.connect(self._on_ai_progress_update)
-        worker.streaming_chunk.connect(self._on_ai_stream_chunk)
-
-        self.ai_worker = worker
-        self.last_query = f"[Screenshot Analysis] {query}"
-        self.current_ai_mode = "screenshot"
-        self.ai_stream_buffer = ""
-
-        self.conv_memory.add_user(f"[Screenshot] {query}")
-        self.loading_overlay.setText("📷 Analyzing screenshot...")
-        self.loading_overlay.show()
-        self.loading_overlay.raise_()
-
-        # Clear the pending screenshot
-        self._pending_screenshot = None
 
         worker.start()
 
@@ -948,28 +518,15 @@ class VimBrowser(QMainWindow):
 
         if status != "success":
             self._handle_ai_error(payload)
-            # Log error to sidebar
-            self.ai_sidebar.add_message("system", f"Error: {payload}")
             return
 
         self.conv_memory.add_assistant(payload)
         if self.conversation_log and self.last_query is not None:
             self.conversation_log.append(self.last_query, payload)
 
-        # Add assistant response to sidebar
-        if self.last_query:
-            # Parse the response to show a cleaner version in sidebar
-            try:
-                action = ResponseProcessor.parse_response(payload)
-                action_summary = f"{action.type.upper()}: {str(action)[:100]}{'...' if len(str(action)) > 100 else ''}"
-                self.ai_sidebar.add_message("assistant", action_summary)
-            except (ValueError, StructuredAIError) as exc:
-                print(f"AI response parsing failed in sidebar: {exc}")
-                self.ai_sidebar.add_message("assistant", payload[:200] + "...")
-
         try:
             action = ResponseProcessor.parse_response(payload)
-        except (ValueError, StructuredAIError) as exc:  # pragma: no cover - defensive fallback
+        except Exception as exc:  # pragma: no cover - defensive fallback
             print(f"AI response parsing failed: {exc}")
             action = ResponseProcessor.parse_response(f"HTML:{payload}")
 
@@ -994,29 +551,9 @@ class VimBrowser(QMainWindow):
         status_bar.showMessage(message, timeout)
         QTimer.singleShot(timeout, status_bar.hide)
 
-    def toggle_sidebar(self) -> None:
-        """Toggle the AI sidebar visibility"""
-        self.sidebar_visible = not self.sidebar_visible
-        if self.sidebar_visible:
-            self.ai_sidebar.show()
-            self._show_notification("AI sidebar shown", timeout=2000)
-        else:
-            self.ai_sidebar.hide()
-            self._show_notification("AI sidebar hidden", timeout=2000)
-
     def setup_keybindings(self):
         # Escape key - always goes to normal mode
         QShortcut(QKeySequence("Escape"), self, self.normal_mode)
-
-        # Command mode cycling with Ctrl+Arrow keys
-        QShortcut(QKeySequence("Ctrl+Down"), self, lambda: self.cycle_command_mode(1))
-        QShortcut(QKeySequence("Ctrl+Up"), self, lambda: self.cycle_command_mode(-1))
-        
-        # Show URL history in 'o' mode
-        QShortcut(QKeySequence("Ctrl+Space"), self, self.show_url_history)
-        
-        # Toggle AI sidebar
-        QShortcut(QKeySequence("Ctrl+B"), self, self.toggle_sidebar)
 
         # Normal mode shortcuts
         QShortcut(QKeySequence(":"), self, self.command_mode)
@@ -1040,13 +577,6 @@ class VimBrowser(QMainWindow):
         QShortcut(QKeySequence("Ctrl+W"), self, self.close_buffer)
         QShortcut(QKeySequence("Ctrl+R"), self, self.reload_page)
         QShortcut(QKeySequence("Ctrl+Tab"), self, self.next_buffer)
-        
-        # External browser integration
-        QShortcut(QKeySequence("Ctrl+Shift+O"), self, self.open_in_external_browser)  # Open in external browser
-        QShortcut(QKeySequence("e"), self, self.open_in_external_browser)  # Quick external browser
-        
-        # Screenshot analysis
-        QShortcut(QKeySequence("Ctrl+Shift+S"), self, self.screenshot_analysis_mode)  # Screenshot + AI analysis
 
     def keyPressEvent(self, event):
         if self.mode == "NORMAL":
@@ -1071,7 +601,6 @@ class VimBrowser(QMainWindow):
                 "u",
                 "g",
                 " ",
-                "e",
             ]:
                 # Let shortcuts handle these
                 pass
@@ -1097,35 +626,6 @@ class VimBrowser(QMainWindow):
         self.update_title()
         self.setFocus()
 
-    def cycle_command_mode(self, direction: int = 1) -> None:
-        """Cycle through command prompt modes with Ctrl+Arrow keys.
-        
-        Args:
-            direction: 1 for next mode, -1 for previous mode
-        """
-        if self.mode != "COMMAND":
-            return
-        
-        current_prefix = self.active_command_prefix or ":"
-        
-        try:
-            current_index = COMMAND_PROMPT_ORDER.index(current_prefix)
-            next_index = (current_index + direction) % len(COMMAND_PROMPT_ORDER)
-            next_prefix = COMMAND_PROMPT_ORDER[next_index]
-            
-            # Save current input text
-            current_text = self.command_line.text() if hasattr(self, "command_line") else ""
-            
-            # Switch to new mode
-            self.show_command_line(next_prefix)
-            
-            # Restore text if it makes sense (empty or compatible)
-            if current_text and hasattr(self, "command_line"):
-                self.command_line.setText(current_text)
-        except ValueError:
-            # Current prefix not in order list, default to command mode
-            self.show_command_line(":")
-
     def command_mode(self):
         if self.mode == "NORMAL":
             self.mode = "COMMAND"
@@ -1135,23 +635,6 @@ class VimBrowser(QMainWindow):
         if self.mode == "NORMAL":
             self.mode = "COMMAND"
             self.show_command_line("/")
-
-    def show_url_history(self):
-        """Show URL history in a popup when in 'o' mode."""
-        if self.mode != "COMMAND" or self.active_command_prefix != "o ":
-            return
-        
-        if not self.url_history:
-            self._show_notification("No URL history available", timeout=2000)
-            return
-        
-        # Show notification with recent URLs
-        recent_urls = self.url_history[:5]
-        history_preview = "\n".join([f"{i+1}. {url[:60]}" for i, url in enumerate(recent_urls)])
-        self._show_notification(
-            f"Recent URLs (press Tab to cycle):\n{history_preview}", 
-            timeout=5000
-        )
 
     def open_prompt(self):
         if self.mode == "NORMAL":
@@ -1187,53 +670,6 @@ class VimBrowser(QMainWindow):
         if self.mode == "NORMAL":
             self.mode = "AI_CHAT"
             self.show_command_line("🤖 ")
-
-    def screenshot_analysis_mode(self):
-        """Capture screenshot and prompt user for question about it."""
-        if self.mode != "NORMAL":
-            return
-        
-        self._show_notification("Capturing screenshot...", timeout=2000)
-        
-        # Capture screenshot asynchronously
-        if hasattr(self, "browser") and self.browser:
-            def on_screenshot_captured(image_bytes: bytes):
-                if not image_bytes:
-                    self._show_notification("Screenshot capture failed", timeout=2500)
-                    return
-                
-                # Store screenshot data for the AI worker
-                self._pending_screenshot = image_bytes
-                
-                # Show command palette for user to ask a question
-                self.mode = "SCREENSHOT_ANALYSIS"
-                self.show_command_line("📷 ")
-                self._show_notification("Screenshot captured! Ask a question about it.", timeout=2500)
-            
-            # Use Qt WebEngineView's grab method
-            try:
-                pixmap = self.browser.grab()
-                from PySide6.QtCore import QBuffer, QIODevice
-                from PySide6.QtGui import QImage
-                
-                # Convert pixmap to QImage
-                image = pixmap.toImage()
-                
-                # Convert to PNG bytes
-                buffer = QBuffer()
-                buffer.open(QIODevice.OpenModeFlag.WriteOnly)
-                image.save(buffer, "PNG")
-                
-                # Get the bytes
-                image_bytes = buffer.data().data()
-                buffer.close()
-                
-                on_screenshot_captured(image_bytes)
-            except Exception as e:
-                print(f"Error capturing screenshot: {e}")
-                self._show_notification("Screenshot capture failed", timeout=2500)
-        else:
-            self._show_notification("Browser not available", timeout=2500)
 
     def show_help(self):
         if self.mode == "NORMAL":
@@ -1283,14 +719,6 @@ class VimBrowser(QMainWindow):
             query = command[2:]
             print(f"Executing AI chat with query: '{query}'")
             self.ai_chat(query)
-        elif command.startswith("📷 "):
-            query = command[3:].strip()
-            if query:
-                print(f"Executing screenshot analysis with query: '{query}'")
-                self._start_screenshot_analysis(query)
-            else:
-                self._show_notification("Please provide a question about the screenshot", timeout=2500)
-                self.normal_mode()
 
         self.normal_mode()
 
@@ -1317,168 +745,12 @@ class VimBrowser(QMainWindow):
                 self.next_buffer()
             elif cmd.startswith("bp"):
                 self.prev_buffer()
-        elif cmd.startswith("browser"):
-            # Handle external browser commands
-            if cmd == "browser":
-                # Open current page in default external browser
-                self.open_in_external_browser()
-            elif cmd == "browser-list":
-                # List available browsers
-                self.list_available_browsers()
-            elif cmd.startswith("browser "):
-                # Parse browser command: "browser firefox" or "browser firefox https://example.com"
-                parts = cmd[8:].split(' ', 1)
-                if len(parts) == 1:
-                    # Just browser name, open current page
-                    browser_name = parts[0]
-                    if browser_name in ['list', '-list']:
-                        self.list_available_browsers()
-                    else:
-                        self.open_in_specific_browser(browser_name)
-                else:
-                    # Browser name and URL
-                    browser_name, url = parts
-                    self.open_in_specific_browser(browser_name, url)
-        elif cmd.startswith("bm"):
-            # Handle bookmark commands
-            self.execute_bookmark_command(cmd)
-        elif cmd in ["ext", "external"]:
-            # Shorthand for opening in external browser
-            self.open_in_external_browser()
-        elif cmd.startswith("files") or cmd.startswith("fb"):
-            # File browser commands
-            if cmd in ["files", "fb"]:
-                # Show file browser for current directory
-                self.show_file_browser()
-            elif cmd.startswith("files "):
-                # Browse specific directory
-                path = cmd[6:].strip()
-                self.show_file_browser(path)
-            elif cmd.startswith("fb "):
-                # Browse specific directory (shorthand)
-                path = cmd[3:].strip()
-                self.show_file_browser(path)
-        elif cmd.startswith("index"):
-            # Index files with embeddings
-            if cmd.startswith("index "):
-                path = cmd[6:].strip()
-                self.index_directory(path)
-            else:
-                self.index_directory()
-        elif cmd.startswith("search-files"):
-            # Search indexed files
-            if cmd.startswith("search-files "):
-                query = cmd[13:].strip()
-                self.search_indexed_files(query)
-            else:
-                self._show_notification("Usage: :search-files <query>", timeout=2000)
-        elif cmd.startswith("export"):
-            # Handle export commands
-            if cmd in ["export-html", "export html"]:
-                self.export_page_html()
-            elif cmd in ["export-md", "export-markdown", "export md"]:
-                self.export_page_markdown()
-            elif cmd in ["export-pdf", "export pdf"]:
-                self.export_page_pdf()
-            elif cmd == "export":
-                # Show export help
-                self._show_notification(
-                    "Export commands:\n"
-                    ":export-html - Save page as HTML\n"
-                    ":export-md - Convert page to Markdown\n"
-                    ":export-pdf - Save page as PDF",
-                    timeout=5000
-                )
         elif cmd.isdigit():
             buf_num = int(cmd) - 1
             if 0 <= buf_num < len(self.buffers):
                 self.current_buffer = buf_num
                 self.browser.load(QUrl(self.buffers[self.current_buffer]))
                 self.update_title()
-
-    def open_in_external_browser(self, url: Optional[str] = None) -> None:
-        """Open URL in system default browser or specified browser."""
-        if url is None:
-            # Get current page URL
-            current_url = self.browser.url().toString()
-            if not current_url or current_url.startswith("data:"):
-                self._show_notification("Cannot open data URLs in external browser", timeout=2500)
-                return
-            url = current_url
-        
-        try:
-            # Clean up the URL if it's a data URL or local content
-            if url.startswith("data:"):
-                self._show_notification("Cannot open data URLs in external browser", timeout=2500)
-                return
-            
-            # Ensure URL has protocol
-            if not url.startswith(('http://', 'https://')):
-                url = 'https://' + url
-            
-            webbrowser.open(url)
-            self._show_notification(f"Opened in external browser: {url[:50]}...", timeout=2000)
-            
-        except Exception as e:
-            print(f"Failed to open URL in external browser: {e}")
-            self._show_notification("Failed to open URL in external browser", timeout=2500)
-
-    def list_available_browsers(self) -> None:
-        """Show available browsers on the system."""
-        try:
-            # Get all registered browsers
-            browsers = []
-            
-            # Add common browser names that webbrowser might recognize
-            common_browsers = [
-                'firefox', 'chrome', 'chromium', 'safari', 'edge', 'opera'
-            ]
-            
-            for browser in common_browsers:
-                try:
-                    browser_obj = webbrowser.get(browser)
-                    if browser_obj:
-                        browsers.append(browser)
-                except webbrowser.Error:
-                    continue
-            
-            if browsers:
-                browser_list = ", ".join(browsers)
-                self._show_notification(f"Available browsers: {browser_list}", timeout=4000)
-            else:
-                self._show_notification("Using system default browser", timeout=2000)
-                
-        except Exception as e:
-            print(f"Failed to list browsers: {e}")
-            self._show_notification("Could not detect available browsers", timeout=2500)
-
-    def open_in_specific_browser(self, browser_name: str, url: Optional[str] = None) -> None:
-        """Open URL in a specific browser."""
-        if url is None:
-            current_url = self.browser.url().toString()
-            if not current_url or current_url.startswith("data:"):
-                self._show_notification("Cannot open data URLs in external browser", timeout=2500)
-                return
-            url = current_url
-        
-        try:
-            if url.startswith("data:"):
-                self._show_notification("Cannot open data URLs in external browser", timeout=2500)
-                return
-            
-            if not url.startswith(('http://', 'https://')):
-                url = 'https://' + url
-            
-            # Try to get the specific browser
-            browser_obj = webbrowser.get(browser_name)
-            browser_obj.open(url)
-            self._show_notification(f"Opened in {browser_name}: {url[:40]}...", timeout=2000)
-            
-        except webbrowser.Error:
-            self._show_notification(f"Browser '{browser_name}' not found", timeout=2500)
-        except Exception as e:
-            print(f"Failed to open URL in {browser_name}: {e}")
-            self._show_notification(f"Failed to open URL in {browser_name}", timeout=2500)
 
     def toggle_dev_tools(self):
         if not hasattr(self, "browser") or self.browser is None:
@@ -1519,21 +791,10 @@ class VimBrowser(QMainWindow):
         if url.startswith("data:"):
             qurl = QUrl(url)
             print(f"Loading data URL, length: {len(url)}")
-        # Handle file:// URLs  
-        elif url.startswith("file://"):
-            qurl = QUrl(url)
-            print(f"Loading file URL: {url}")
         else:
             if not url.startswith(("http://", "https://")):
                 url = "https://" + url
             qurl = QUrl(url)
-
-        # Track URL history (skip data URLs)
-        if not url.startswith("data:") and url not in self.url_history:
-            self.url_history.insert(0, url)
-            # Keep only last N URLs
-            if len(self.url_history) > self.url_history_max:
-                self.url_history = self.url_history[:self.url_history_max]
 
         # Add to buffers if not already there
         if url not in self.buffers:
@@ -1696,465 +957,10 @@ class VimBrowser(QMainWindow):
         self.open_url(to_data_url(debug_html))
 
     def show_buffers(self):
-        """Display a detailed list of all buffers with quick switching."""
-        if not self.buffers:
-            self._show_notification("No buffers open", timeout=2000)
-            return
-        
-        # Create a detailed HTML view of buffers
-        buffer_rows = []
-        for i, url in enumerate(self.buffers):
-            is_current = i == self.current_buffer
-            current_marker = "►" if is_current else " "
-            row_class = "current" if is_current else ""
-            
-            # Extract meaningful title from URL
-            if url.startswith("data:"):
-                display_url = "AI Generated Content"
-                domain = "data:"
-            elif url.startswith("file://"):
-                display_url = url[7:]  # Remove file://
-                domain = "file:"
-            else:
-                display_url = url
-                # Extract domain
-                try:
-                    from urllib.parse import urlparse
-                    parsed = urlparse(url)
-                    domain = parsed.netloc or parsed.scheme
-                except Exception:
-                    domain = url.split('/')[0]
-            
-            # Truncate long URLs
-            if len(display_url) > 80:
-                display_url = display_url[:77] + "..."
-            
-            buffer_rows.append(f"""
-            <tr class="{row_class}" onclick="window.switchBuffer({i})">
-                <td class="marker">{current_marker}</td>
-                <td class="index">{i + 1}</td>
-                <td class="domain">{html.escape(domain)}</td>
-                <td class="url">{html.escape(display_url)}</td>
-            </tr>
-            """)
-        
-        buffers_html = f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="UTF-8">
-            <title>Buffers</title>
-            <style>
-                body {{
-                    background: #1a1a1a;
-                    color: #e0e0e0;
-                    font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', monospace;
-                    padding: 30px;
-                    margin: 0;
-                }}
-                h1 {{
-                    color: #4a9eff;
-                    font-size: 28px;
-                    margin-bottom: 10px;
-                }}
-                .subtitle {{
-                    color: #888;
-                    font-size: 14px;
-                    margin-bottom: 30px;
-                }}
-                table {{
-                    width: 100%;
-                    border-collapse: collapse;
-                    background: #242424;
-                    border-radius: 8px;
-                    overflow: hidden;
-                    box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-                }}
-                th {{
-                    background: #2d2d2d;
-                    color: #4a9eff;
-                    text-align: left;
-                    padding: 12px 16px;
-                    font-weight: 600;
-                    font-size: 13px;
-                    text-transform: uppercase;
-                    letter-spacing: 0.5px;
-                }}
-                tr {{
-                    border-bottom: 1px solid #333;
-                    cursor: pointer;
-                    transition: background-color 0.2s;
-                }}
-                tr:hover {{
-                    background: #2a2a2a;
-                }}
-                tr.current {{
-                    background: #2d3d4d;
-                }}
-                tr.current:hover {{
-                    background: #334455;
-                }}
-                td {{
-                    padding: 12px 16px;
-                    font-size: 14px;
-                }}
-                td.marker {{
-                    width: 30px;
-                    color: #4a9eff;
-                    font-weight: bold;
-                    text-align: center;
-                }}
-                td.index {{
-                    width: 50px;
-                    color: #888;
-                    font-weight: 600;
-                }}
-                td.domain {{
-                    width: 200px;
-                    color: #9370db;
-                    font-weight: 500;
-                }}
-                td.url {{
-                    color: #d0d0d0;
-                    word-break: break-all;
-                }}
-                .help {{
-                    margin-top: 30px;
-                    padding: 20px;
-                    background: #242424;
-                    border-radius: 8px;
-                    border-left: 3px solid #4a9eff;
-                }}
-                .help h3 {{
-                    color: #4a9eff;
-                    margin-top: 0;
-                    font-size: 16px;
-                }}
-                .help p {{
-                    margin: 8px 0;
-                    color: #aaa;
-                    font-size: 13px;
-                }}
-                .key {{
-                    background: #333;
-                    padding: 2px 8px;
-                    border-radius: 4px;
-                    color: #4a9eff;
-                    font-family: monospace;
-                    font-weight: bold;
-                }}
-            </style>
-        </head>
-        <body>
-            <h1>📑 Buffer List</h1>
-            <p class="subtitle">Click a row or press the buffer number to switch</p>
-            
-            <table>
-                <thead>
-                    <tr>
-                        <th></th>
-                        <th>#</th>
-                        <th>Domain</th>
-                        <th>URL</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {''.join(buffer_rows)}
-                </tbody>
-            </table>
-            
-            <div class="help">
-                <h3>💡 Quick Navigation</h3>
-                <p><span class="key">:1</span>, <span class="key">:2</span>, etc. - Jump to buffer by number</p>
-                <p><span class="key">n</span> / <span class="key">p</span> - Next/Previous buffer</p>
-                <p><span class="key">:bn</span> / <span class="key">:bp</span> - Next/Previous buffer (command mode)</p>
-                <p><span class="key">x</span> or <span class="key">:bd</span> - Close current buffer</p>
-                <p><span class="key">Escape</span> - Return to normal mode</p>
-            </div>
-            
-            <script>
-                function switchBuffer(index) {{
-                    // Note: This won't work in real use since we can't communicate back to Qt easily
-                    // The main way to switch is still via :1, :2, etc. commands
-                    console.log('Switch to buffer', index);
-                }}
-            </script>
-        </body>
-        </html>
-        """
-        
-        self.open_url(to_data_url(buffers_html))
-
-    def show_file_browser(self, path: Optional[str] = None):
-        """Display file browser for the given path."""
-        from pathlib import Path
-        from .storage.file_browser import FileBrowser
-        from .rendering.html import render_template, create_data_url
-        
-        try:
-            # Initialize file browser
-            if path:
-                target_path = Path(path).expanduser().resolve()
-            else:
-                target_path = Path.home()
-            
-            browser = FileBrowser(target_path)
-            
-            # Get directory listing
-            entries = browser.list_directory()
-            
-            # Prepare context for template
-            context = {
-                "current_path": str(browser.current_path),
-                "parent_path": str(browser.current_path.parent) if browser.current_path.parent != browser.current_path else None,
-                "home_path": str(Path.home()),
-                "entries": [entry.to_dict() for entry in entries],
-            }
-            
-            # Render template
-            html_content = render_template("file_browser.html", context)
-            
-            # Open in browser
-            self.open_url(create_data_url(html_content))
-            
-        except Exception as e:
-            error_msg = f"Failed to browse directory: {e}"
-            self._show_notification(error_msg, timeout=3000)
-            print(error_msg)
-
-    def index_directory(self, path: Optional[str] = None):
-        """Index files in directory with embeddings."""
-        from pathlib import Path
-        from .storage.file_browser import FileIndexer
-        
-        try:
-            # Determine target path
-            if path:
-                target_path = Path(path).expanduser().resolve()
-            else:
-                target_path = Path.home()
-            
-            if not target_path.is_dir():
-                self._show_notification(f"Not a directory: {target_path}", timeout=2000)
-                return
-            
-            # Show progress notification
-            self._show_notification(f"Indexing files in {target_path}...", timeout=2000)
-            
-            # Index files
-            indexer = FileIndexer()
-            count = indexer.index_directory(target_path, recursive=True, max_files=100)
-            
-            # Show completion
-            self._show_notification(f"Indexed {count} files", timeout=3000)
-            
-        except Exception as e:
-            error_msg = f"Failed to index directory: {e}"
-            self._show_notification(error_msg, timeout=3000)
-            print(error_msg)
-
-    def search_indexed_files(self, query: str):
-        """Search indexed files by semantic similarity."""
-        from .storage.file_browser import FileIndexer
-        from .rendering.html import render_template, create_data_url
-        
-        try:
-            indexer = FileIndexer()
-            results = indexer.search_files(query, n_results=10)
-            
-            if not results:
-                self._show_notification("No matching files found", timeout=2000)
-                return
-            
-            # Build HTML for results
-            results_html = f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>File Search Results</title>
-    <style>
-        body {{
-            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
-            color: #e0e0e0;
-            margin: 0;
-            padding: 20px;
-            min-height: 100vh;
-        }}
-        .container {{
-            max-width: 1200px;
-            margin: 0 auto;
-            background: rgba(0, 0, 0, 0.3);
-            border-radius: 10px;
-            padding: 20px;
-            backdrop-filter: blur(10px);
-        }}
-        h1 {{ color: #4fc3f7; }}
-        .query {{
-            background: rgba(255, 255, 255, 0.1);
-            padding: 15px;
-            border-radius: 5px;
-            margin-bottom: 20px;
-        }}
-        .result {{
-            background: rgba(255, 255, 255, 0.05);
-            padding: 15px;
-            border-radius: 5px;
-            margin-bottom: 10px;
-            transition: all 0.2s;
-        }}
-        .result:hover {{
-            background: rgba(255, 255, 255, 0.1);
-            transform: translateX(5px);
-        }}
-        .file-path {{
-            color: #81c784;
-            font-weight: bold;
-            margin-bottom: 5px;
-        }}
-        .file-type {{
-            color: #9e9e9e;
-            font-size: 0.9em;
-        }}
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>🔍 File Search Results</h1>
-        <div class="query">
-            <strong>Query:</strong> {html.escape(query)}
-        </div>
-        <div class="results">
-"""
-            
-            for result in results:
-                file_path = result.get('path', 'Unknown')
-                file_name = result.get('name', 'Unknown')
-                file_type = result.get('type', 'unknown')
-                
-                results_html += f"""
-            <div class="result">
-                <div class="file-path">📄 {html.escape(file_name)}</div>
-                <div style="color: #b0b0b0; font-size: 0.85em;">{html.escape(file_path)}</div>
-                <div class="file-type">Type: {html.escape(file_type)}</div>
-            </div>
-"""
-            
-            results_html += """
-        </div>
-    </div>
-</body>
-</html>
-"""
-            
-            self.open_url(create_data_url(results_html))
-            
-        except Exception as e:
-            error_msg = f"Failed to search files: {e}"
-            self._show_notification(error_msg, timeout=3000)
-            print(error_msg)
-    def execute_bookmark_command(self, cmd: str) -> None:
-        """Handle bookmark subcommands."""
-        if not self.bookmark_store:
-            self._show_notification("Bookmark store not initialized", timeout=2500)
-            return
-        
-        parts = cmd.split(maxsplit=2)
-        subcommand = parts[1] if len(parts) > 1 else "list"
-        
-        if subcommand == "add":
-            # Add current page as bookmark
-            current_url = self.browser.url().toString()
-            if not current_url or current_url.startswith("data:"):
-                self._show_notification("Cannot bookmark data URLs", timeout=2500)
-                return
-            
-            # Get title from page or use URL
-            title = current_url
-            try:
-                # Try to get page title
-                title = self.browser.page().title() or current_url
-            except Exception:
-                pass
-            
-            # Parse additional args (tags)
-            tags = []
-            if len(parts) > 2:
-                tags = [t.strip() for t in parts[2].split(",")]
-            
-            bookmark = Bookmark(
-                id=str(uuid.uuid4()),
-                title=title,
-                url=current_url,
-                tags=tags,
-                bookmark_type="url",
-            )
-            self.bookmark_store.add(bookmark)
-            self._show_notification(f"Bookmark added: {title[:40]}", timeout=2500)
-        
-        elif subcommand == "list":
-            # Show all bookmarks
-            self.show_bookmarks()
-        
-        elif subcommand == "search":
-            # Search bookmarks
-            if len(parts) < 3:
-                self._show_notification("Usage: :bm search <query>", timeout=2500)
-                return
-            query = parts[2]
-            self.show_bookmarks(query=query)
-        
-        elif subcommand == "del" or subcommand == "delete":
-            # Delete a bookmark by ID
-            if len(parts) < 3:
-                self._show_notification("Usage: :bm del <id>", timeout=2500)
-                return
-            bookmark_id = parts[2]
-            if self.bookmark_store.remove(bookmark_id):
-                self._show_notification(f"Bookmark {bookmark_id[:8]} deleted", timeout=2500)
-            else:
-                self._show_notification(f"Bookmark {bookmark_id[:8]} not found", timeout=2500)
-        
-        elif subcommand == "tags":
-            # Show all tags
-            tags = self.bookmark_store.get_all_tags()
-            if tags:
-                tags_html = "<br>".join(f"#{tag}" for tag in tags)
-                self._show_notification(f"Tags: {', '.join(tags)}", timeout=3000)
-            else:
-                self._show_notification("No tags found", timeout=2000)
-        
-        else:
-            self._show_notification(f"Unknown bookmark command: {subcommand}", timeout=2500)
-
-    def show_bookmarks(self, query: Optional[str] = None) -> None:
-        """Display bookmarks in a styled HTML view."""
-        if not self.bookmark_store:
-            self._show_notification("Bookmark store not initialized", timeout=2500)
-            return
-        
-        # Get bookmarks based on query
-        if query:
-            bookmarks = self.bookmark_store.search(query)
-        else:
-            bookmarks = self.bookmark_store.list_all()
-        
-        # Get statistics
-        all_tags = self.bookmark_store.get_all_tags()
-        
-        # Render template
-        html_content = render_template(
-            "bookmarks.html",
-            {
-                "bookmarks": bookmarks,
-                "total_count": len(self.bookmark_store.list_all()),
-                "tag_count": len(all_tags),
-                "query": query,
-            }
-        )
-        
-        # Load in browser
-        self.open_url(create_data_url(html_content))
+        if self.buffers:
+            buf_info = f"Buffers: {', '.join(f'{i + 1}:{url.split("/")[-1][:20]}' for i, url in enumerate(self.buffers))}"
+            self.setWindowTitle(buf_info)
+            self.mode_timer.start(3000)
 
     def update_title(self):
         self.setWindowTitle("Minimal Browser")
@@ -2182,75 +988,6 @@ class VimBrowser(QMainWindow):
     def hide_mode_indicator(self):
         if self.mode == "NORMAL":
             self.update_title()
-
-    def export_page_html(self):
-        """Export current page as HTML snapshot."""
-        if not hasattr(self, "browser") or self.browser is None:
-            self._show_notification("Browser instance unavailable", timeout=2500)
-            return
-
-        def handle_html(html_content: str) -> None:
-            try:
-                exporter = PageExporter()
-                url = self._current_url() or "page"
-                output_path = exporter.export_html(html_content, url)
-                self._show_notification(
-                    f"HTML exported to:\n{output_path}",
-                    timeout=5000
-                )
-            except Exception as e:
-                self._show_notification(
-                    f"Export failed: {str(e)}",
-                    timeout=3000
-                )
-
-        self.browser.page().toHtml(handle_html)
-
-    def export_page_markdown(self):
-        """Export current page as Markdown."""
-        if not hasattr(self, "browser") or self.browser is None:
-            self._show_notification("Browser instance unavailable", timeout=2500)
-            return
-
-        def handle_html(html_content: str) -> None:
-            try:
-                exporter = PageExporter()
-                url = self._current_url() or "page"
-                output_path = exporter.export_markdown(html_content, url)
-                self._show_notification(
-                    f"Markdown exported to:\n{output_path}",
-                    timeout=5000
-                )
-            except Exception as e:
-                self._show_notification(
-                    f"Export failed: {str(e)}",
-                    timeout=3000
-                )
-
-        self.browser.page().toHtml(handle_html)
-
-    def export_page_pdf(self):
-        """Export current page as PDF."""
-        if not hasattr(self, "browser") or self.browser is None:
-            self._show_notification("Browser instance unavailable", timeout=2500)
-            return
-
-        def handle_html(html_content: str) -> None:
-            try:
-                exporter = PageExporter()
-                url = self._current_url() or "page"
-                output_path = exporter.export_pdf(html_content, url)
-                self._show_notification(
-                    f"PDF exported to:\n{output_path}",
-                    timeout=5000
-                )
-            except Exception as e:
-                self._show_notification(
-                    f"Export failed: {str(e)}",
-                    timeout=3000
-                )
-
-        self.browser.page().toHtml(handle_html)
 
     def get_help_content(self):
         return """<!DOCTYPE html>
@@ -2336,7 +1073,7 @@ class VimBrowser(QMainWindow):
             </tr>
             <tr>
                 <td><span class="key">:b</span></td>
-                <td>Show detailed buffer list with URLs</td>
+                <td>Show buffers</td>
             </tr>
             <tr>
                 <td><span class="key">:1,2,3...</span></td>
@@ -2350,11 +1087,7 @@ class VimBrowser(QMainWindow):
         <table>
             <tr>
                 <td><span class="key">o</span></td>
-                <td>Open URL (with Tab completion for history)</td>
-            </tr>
-            <tr>
-                <td><span class="key">e</span></td>
-                <td>Open current page in external browser</td>
+                <td>Open URL</td>
             </tr>
             <tr>
                 <td><span class="key">s</span></td>
@@ -2376,24 +1109,6 @@ class VimBrowser(QMainWindow):
     </div>
     
     <div class="section">
-        <h2>Command Prompt Features</h2>
-        <table>
-            <tr>
-                <td><span class="key">Ctrl+Up/Down</span></td>
-                <td>Cycle between command modes (:, /, o, s, a)</td>
-            </tr>
-            <tr>
-                <td><span class="key">Tab</span></td>
-                <td>Complete commands (:) or cycle URL history (o)</td>
-            </tr>
-            <tr>
-                <td><span class="key">Ctrl+Space</span></td>
-                <td>Show recent URL history (in o mode)</td>
-            </tr>
-        </table>
-    </div>
-    
-    <div class="section">
         <h2>Developer Tools</h2>
         <table>
             <tr>
@@ -2407,10 +1122,6 @@ class VimBrowser(QMainWindow):
             <tr>
                 <td><span class="key">Ctrl+I</span></td>
                 <td>Show debug info</td>
-            </tr>
-            <tr>
-                <td><span class="key">Ctrl+Shift+O</span></td>
-                <td>Open current page in external browser</td>
             </tr>
         </table>
     </div>
@@ -2464,38 +1175,6 @@ class VimBrowser(QMainWindow):
             <tr>
                 <td><span class="cmd">:bn/:bp</span></td>
                 <td>Next/previous buffer</td>
-            </tr>
-            <tr>
-                <td><span class="cmd">:browser</span></td>
-                <td>Open current page in external browser</td>
-            </tr>
-            <tr>
-                <td><span class="cmd">:browser &lt;name&gt;</span></td>
-                <td>Open in specific browser (firefox, chrome, etc.)</td>
-            </tr>
-            <tr>
-                <td><span class="cmd">:browser-list</span></td>
-                <td>List available browsers</td>
-            </tr>
-            <tr>
-                <td><span class="cmd">:ext</span></td>
-                <td>Open current page in external browser (shorthand)</td>
-            </tr>
-            <tr>
-                <td><span class="cmd">:files [path]</span></td>
-                <td>Browse local files and directories</td>
-            </tr>
-            <tr>
-                <td><span class="cmd">:fb [path]</span></td>
-                <td>File browser (shorthand)</td>
-            </tr>
-            <tr>
-                <td><span class="cmd">:index [path]</span></td>
-                <td>Index files with embeddings for search</td>
-            </tr>
-            <tr>
-                <td><span class="cmd">:search-files &lt;query&gt;</span></td>
-                <td>Search indexed files semantically</td>
             </tr>
         </table>
     </div>

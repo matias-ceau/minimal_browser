@@ -1,9 +1,4 @@
-"""AI tools and response processing.
-
-This module provides utilities for parsing AI responses and converting them
-into type-safe Pydantic models. All parsing operations enforce strict type
-validation to ensure data integrity throughout the AI interaction pipeline.
-"""
+"""AI tools and response processing."""
 
 from __future__ import annotations
 
@@ -15,44 +10,13 @@ from pydantic import HttpUrl, ValidationError
 from ..rendering.html import ensure_html, wrap_content_as_html
 from .schemas import AIAction, HtmlAction, NavigateAction, SearchAction
 
-# Optional: Import optimized text processor for performance
-try:
-    from ..native import TextProcessor
-
-    _USE_NATIVE_OPTIMIZATION = True
-except ImportError:
-    _USE_NATIVE_OPTIMIZATION = False
-
 
 class ResponseProcessor:
-    """Processes AI responses and determines actions.
-    
-    This class provides static methods for parsing AI responses into type-safe
-    Pydantic models. It supports both explicit prefixes (NAVIGATE:, SEARCH:, HTML:)
-    and intelligent parsing based on content patterns.
-    
-    All parsing operations enforce strict type validation using Pydantic models
-    to ensure data integrity throughout the AI interaction pipeline.
-    """
+    """Processes AI responses and determines actions."""
 
     @staticmethod
     def parse_response(response: str) -> AIAction:
-        """Parse AI response text and return a validated action model.
-        
-        This is the primary entry point for converting raw AI text responses
-        into type-safe AIAction instances. The method handles various response
-        formats and falls back to intelligent parsing when explicit prefixes
-        are not provided.
-        
-        Args:
-            response: Raw AI response text (may include context markers)
-            
-        Returns:
-            A validated AIAction instance (NavigateAction, SearchAction, or HtmlAction)
-            
-        Raises:
-            ValidationError: If the response cannot be parsed into a valid action
-        """
+        """Parse AI response text and return a validated action model."""
 
         response_text, query = ResponseProcessor._extract_query_from_context(response)
         action_type, payload = ResponseProcessor._infer_action_components(
@@ -100,23 +64,13 @@ class ResponseProcessor:
             r"(?:open|visit)\s+([a-z]+\.com|[a-z]+\.org|[a-z]+\.net)",
         ]
 
-        # Try optimized pattern extraction if available
-        if _USE_NATIVE_OPTIMIZATION:
-            for pattern in nav_patterns:
-                url = TextProcessor.extract_url_from_text(response_lower, pattern)
-                if url:
-                    if not url.startswith(("http://", "https://")):
-                        url = f"https://{url}"
-                    return "navigate", url
-        else:
-            # Fallback to standard regex
-            for pattern in nav_patterns:
-                match = re.search(pattern, response_lower)
-                if match:
-                    url = match.group(1)
-                    if not url.startswith(("http://", "https://")):
-                        url = f"https://{url}"
-                    return "navigate", url
+        for pattern in nav_patterns:
+            match = re.search(pattern, response_lower)
+            if match:
+                url = match.group(1)
+                if not url.startswith(("http://", "https://")):
+                    url = f"https://{url}"
+                return "navigate", url
 
         if any(word in response_lower for word in ["search for", "find", "look up"]):
             search_match = re.search(
@@ -138,17 +92,7 @@ class ResponseProcessor:
             "website",
         }
 
-        # Use optimized keyword check if available
-        if _USE_NATIVE_OPTIMIZATION:
-            has_html_indicator = TextProcessor.fast_string_contains(
-                response_lower, html_indicators
-            )
-        else:
-            has_html_indicator = any(
-                indicator in response_lower for indicator in html_indicators
-            )
-
-        if has_html_indicator:
+        if any(indicator in response_lower for indicator in html_indicators):
             return "html", response
 
         if len(response.split()) <= 5:
@@ -159,23 +103,7 @@ class ResponseProcessor:
 
     @staticmethod
     def _build_action(action_type: str, payload: str, query: str) -> AIAction:
-        """Convert action tuple into a validated `AIAction` instance.
-        
-        This method attempts to create the appropriate Pydantic model based on
-        the action type, with fallback logic to ensure a valid action is always
-        returned. All created actions are validated by Pydantic.
-        
-        Args:
-            action_type: The type of action ("navigate", "search", or "html")
-            payload: The action payload data
-            query: The original user query (for fallback context)
-            
-        Returns:
-            A validated AIAction instance
-            
-        Raises:
-            ValidationError: Only if all fallback attempts fail (rare)
-        """
+        """Convert action tuple into a validated `AIAction` instance."""
 
         if action_type == "navigate":
             normalized = ResponseProcessor._normalize_url(payload)
@@ -201,20 +129,7 @@ class ResponseProcessor:
 
     @staticmethod
     def action_to_tuple(action: AIAction) -> Tuple[str, str]:
-        """Convert an `AIAction` instance back into (type, payload) format.
-        
-        This provides backward compatibility with code that expects the legacy
-        (type, payload) tuple format instead of Pydantic models.
-        
-        Args:
-            action: A validated AIAction instance
-            
-        Returns:
-            A tuple of (action_type, payload)
-            
-        Raises:
-            TypeError: If action is not a recognized AIAction type
-        """
+        """Convert an `AIAction` instance back into (type, payload) format."""
 
         if isinstance(action, NavigateAction):
             return action.type, str(action.url)
