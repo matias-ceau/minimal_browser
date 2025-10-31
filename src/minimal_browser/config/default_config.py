@@ -34,6 +34,8 @@ class StorageConfig(BaseModel):
     conversation_log: Path = Field(default=CONFIG_DIR / "conversations.json")
     vector_db_path: Path = Field(default=CONFIG_DIR / "vector_db")
     bookmarks_path: Path = Field(default=CONFIG_DIR / "bookmarks.json")
+    history_db_path: Path = Field(default=CONFIG_DIR / "history.db")
+    sessions_dir: Path = Field(default=CONFIG_DIR / "sessions")
 
 
 class SecurityConfig(BaseModel):
