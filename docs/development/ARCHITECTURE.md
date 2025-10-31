@@ -46,8 +46,8 @@ Minimal Browser is a modal, vim-inspired Qt WebEngine shell with a tightly integ
 ┌──────────────▼──────────────────────────────────────────────────┐
 │                 Engines (pluggable web views)                   │
 │  • engines/base.py abstract contract                           │
-│  • engines/qt_engine.py concrete Qt WebEngine                  │
-│  • engines/gtk_engine.py for GTK experimentation               │
+│  • engines/qt_engine.py concrete Qt WebEngine (default)        │
+│  • engines/gtk_engine.py GTK WebKit implementation (optional)  │
 └────────────────────────────────────────────────────────────────┘
 ```
 
@@ -66,7 +66,7 @@ Minimal Browser is a modal, vim-inspired Qt WebEngine shell with a tightly integ
 | ------------ | -------------------------------------------------------------- | --------------------------------------------------------- |
 | UI & Modes   | `minimal_browser.VimBrowser`, `ui/command_palette.py`          | Modal UX, command palette, keybindings, status reporting  |
 | UI Workers   | `ui/ai_worker.py`                                              | Background thread for AI requests with Qt signals         |
-| Engines      | `engines/base.py`, `engines/qt_engine.py`, `engines/gtk_engine.py` | Abstract contract + Qt/GTK WebEngine implementations |
+| Engines      | `engines/base.py`, `engines/qt_engine.py`, `engines/gtk_engine.py` | Abstract contract; Qt WebEngine (default), GTK WebKit (optional) |
 | AI Models    | `ai/models.py`, `ai/structured.py`, `ai/client.py`             | Model registry, structured agent, direct API client       |
 | AI Auth      | `ai/auth.py`                                                   | API key management with keyring/environment support       |
 | AI Parsing   | `ai/tools.py`, `ai/schemas.py`                                 | Parse model output into typed actions (Navigate/Search/Html/Bookmark) |
@@ -83,7 +83,7 @@ Minimal Browser is a modal, vim-inspired Qt WebEngine shell with a tightly integ
 * **Structured Responses**: Pydantic-based action schemas (Navigate, Search, Html, Bookmark) enforce predictable AI outputs and enable deterministic UI handling.
 * **Rendering Separation**: Moving HTML/data URL logic into `rendering/` clarifies the AI parsing layer and prepares for richer templating.
 * **Export Capabilities**: Built-in page export to HTML, Markdown, and PDF via `export/exporter.py` using html2text and WeasyPrint.
-* **Pluggable Engines**: Abstract `WebEngine` contract future-proofs non-Qt implementations (e.g., GTK, headless backends).
+* **Pluggable Engines**: Abstract `WebEngine` contract supports multiple implementations. Qt WebEngine (default) provides full Chromium features; GTK WebKit (optional) offers lighter system dependencies for Linux.
 * **Comprehensive Storage**: Multiple storage backends for conversations, bookmarks, file browsing with semantic search via ChromaDB.
 * **Conversation Hygiene**: `ConversationLog` compacts entries and guards against corrupt log files.
 * **Secure Authentication**: Keyring integration via `ai/auth.py` for secure API key storage across platforms.
@@ -126,7 +126,75 @@ Minimal Browser is a modal, vim-inspired Qt WebEngine shell with a tightly integ
 | HTML injection via AI            | Generated HTML executed with relaxed security       | Introduce sanitization or user prompt before loading AI-generated content       |
 | Optional dependency bloat        | Slower cold start, unused packages                  | Gate optional integrations behind extras/`pyproject` optional-dependencies      |
 
-## 9. References & Related Docs
+## 9. Web Engine Comparison
+
+Minimal Browser supports multiple web engine backends through an abstract `WebEngine` interface. Users can choose the engine that best fits their platform and requirements.
+
+### 9.1 Qt WebEngine (Default)
+
+**Pros:**
+- Full Chromium browser engine with latest web standards support
+- Excellent developer tools integration
+- Cross-platform (Windows, macOS, Linux)
+- Comprehensive Qt integration and documentation
+- Screenshot capture support
+- Stable and well-tested
+
+**Cons:**
+- Large binary size (~250-300MB with dependencies)
+- Longer cold start time (3-5 seconds)
+- Higher memory usage (~150MB baseline)
+- Requires PySide6 which adds significant dependencies
+
+**Best for:** Default choice for most users; production deployments; when web compatibility is critical
+
+### 9.2 GTK WebKit Engine (Optional)
+
+**Pros:**
+- Smaller dependency footprint on Linux systems with GTK already installed
+- Native Linux integration
+- Lower memory usage on GTK-based desktops
+- Alternative for users who prefer GTK over Qt
+
+**Cons:**
+- Linux-focused (limited Windows/macOS support)
+- Requires separate GTK 4.0 and WebKit 6.0 installation
+- Screenshot capture not yet implemented
+- Less comprehensive than Chromium-based Qt WebEngine
+- No CI/CD coverage currently
+
+**Best for:** Linux users with GTK-based desktops; systems where Qt dependencies are undesirable; lightweight Linux deployments
+
+### 9.3 Engine Selection
+
+To use the GTK engine instead of the default Qt engine:
+
+```python
+from minimal_browser.engines.gtk_engine import GtkWebEngine
+
+# Create GTK engine instance
+engine = GtkWebEngine()
+
+# Pass to browser initialization (implementation depends on entry point)
+# browser = VimBrowser(engine=engine)
+```
+
+**Installation requirements for GTK engine:**
+
+```bash
+# Debian/Ubuntu
+sudo apt install gir1.2-webkit-6.0 python3-gi
+
+# Arch Linux  
+sudo pacman -S webkit2gtk python-gobject
+
+# Fedora/RHEL
+sudo dnf install webkit2gtk4.1 python3-gobject
+```
+
+**Note:** Qt WebEngine is the default and recommended engine. GTK WebKit is provided as an optional alternative for specific use cases.
+
+## 10. References & Related Docs
 
 * `.github/copilot-instructions.md` – in-repo assistant briefing
 * [ROADMAP.md](../planning/ROADMAP.md) / [FEATURE_REQUESTS.md](../planning/FEATURE_REQUESTS.md) – feature planning snapshots (pending refresh)
