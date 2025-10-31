@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from urllib.parse import quote
 
-from ..ai.schemas import AIAction, HtmlAction, NavigateAction, SearchAction, BookmarkAction
+from ..ai.schemas import AIAction, HtmlAction, NavigateAction, SearchAction
 from .html import create_data_url
 
 
