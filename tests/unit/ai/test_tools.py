@@ -26,15 +26,20 @@ schemas_module = import_module_direct("minimal_browser.ai.schemas", str(src_dir 
 # Import html module directly (needed by tools)
 html_module = import_module_direct("minimal_browser.rendering.html", str(src_dir / "rendering" / "html.py"))
 
-# Register the html module in sys.modules so relative imports work
-sys.modules["minimal_browser.rendering.html"] = html_module
+# Import webapps module (needed by tools)
+webapps_module = import_module_direct("minimal_browser.rendering.webapps", str(src_dir / "rendering" / "webapps.py"))
 
-# Import tools module - now the relative import should work
+# Register the modules in sys.modules so relative imports work
+sys.modules["minimal_browser.rendering.html"] = html_module
+sys.modules["minimal_browser.rendering.webapps"] = webapps_module
+
+# Import tools module - now the relative imports should work
 tools_module = import_module_direct("minimal_browser.ai.tools", str(src_dir / "ai" / "tools.py"))
 
 HtmlAction = schemas_module.HtmlAction
 NavigateAction = schemas_module.NavigateAction
 SearchAction = schemas_module.SearchAction
+WebappAction = schemas_module.WebappAction
 ResponseProcessor = tools_module.ResponseProcessor
 
 
@@ -99,10 +104,12 @@ class TestResponseProcessorIntelligentParsing:
         assert "python" in action.query.lower()
 
     def test_parse_html_generation_intent(self):
-        """Test detecting HTML generation intent."""
+        """Test detecting webapp generation intent."""
         response = "create a todo list with items"
         action = ResponseProcessor.parse_response(response)
-        assert isinstance(action, HtmlAction)
+        # Now correctly identifies as webapp action due to "todo" keyword
+        assert isinstance(action, WebappAction)
+        assert action.widget_type == "todo"
 
 
 class TestResponseProcessorContextHandling:
@@ -186,6 +193,14 @@ class TestResponseProcessorBackwardCompatibility:
         assert action_type == "html"
         assert "<h1>Test</h1>" in payload
 
+    def test_parse_response_to_tuple_webapp(self):
+        """Test tuple format for WebappAction."""
+        response = "WEBAPP: calculator"
+        action_type, payload = ResponseProcessor.parse_response_to_tuple(response)
+        assert action_type == "html"  # Converted to HTML
+        assert "calculator" in payload.lower()
+
+
 
 class TestResponseProcessorActionToTuple:
     """Test action to tuple conversion."""
@@ -210,3 +225,73 @@ class TestResponseProcessorActionToTuple:
         action_type, payload = ResponseProcessor.action_to_tuple(action)
         assert action_type == "html"
         assert payload == "<p>Test</p>"
+
+    def test_webapp_action_to_tuple(self):
+        """Test converting WebappAction to tuple (converted to HTML)."""
+        action = WebappAction(widget_type="calculator")
+        action_type, payload = ResponseProcessor.action_to_tuple(action)
+        assert action_type == "html"
+        assert "calculator" in payload.lower()
+        assert "<!DOCTYPE html>" in payload
+
+
+class TestResponseProcessorWebappParsing:
+    """Test ResponseProcessor webapp-specific parsing."""
+
+    def test_parse_webapp_prefix(self):
+        """Test explicit WEBAPP: prefix."""
+        response = "WEBAPP: calculator"
+        action = ResponseProcessor.parse_response(response)
+        assert isinstance(action, WebappAction)
+        assert action.widget_type == "calculator"
+
+    def test_parse_webapp_tag_format(self):
+        """Test parsing webapp XML-style tag."""
+        response = 'WEBAPP: <webapp type="todo" theme="dark" />'
+        action = ResponseProcessor.parse_response(response)
+        assert isinstance(action, WebappAction)
+        assert action.widget_type == "todo"
+        assert action.theme == "dark"
+
+    def test_parse_webapp_with_title(self):
+        """Test parsing webapp with custom title."""
+        response = 'WEBAPP: <webapp type="timer" title="My Timer" />'
+        action = ResponseProcessor.parse_response(response)
+        assert isinstance(action, WebappAction)
+        assert action.widget_type == "timer"
+        assert action.title == "My Timer"
+
+    def test_parse_calculator_keyword(self):
+        """Test intelligent parsing recognizes calculator."""
+        response = "show me a calculator"
+        action = ResponseProcessor.parse_response(response)
+        assert isinstance(action, WebappAction)
+        assert action.widget_type == "calculator"
+
+    def test_parse_todo_keyword(self):
+        """Test intelligent parsing recognizes todo."""
+        response = "I need a todo list"
+        action = ResponseProcessor.parse_response(response)
+        assert isinstance(action, WebappAction)
+        assert action.widget_type == "todo"
+
+    def test_parse_timer_keyword(self):
+        """Test intelligent parsing recognizes timer."""
+        response = "create a timer for me"
+        action = ResponseProcessor.parse_response(response)
+        assert isinstance(action, WebappAction)
+        assert action.widget_type == "timer"
+
+    def test_parse_stopwatch_mapped_to_timer(self):
+        """Test stopwatch is mapped to timer widget."""
+        response = "I need a stopwatch"
+        action = ResponseProcessor.parse_response(response)
+        assert isinstance(action, WebappAction)
+        assert action.widget_type == "timer"
+
+    def test_parse_notes_keyword(self):
+        """Test intelligent parsing recognizes notes."""
+        response = "give me a notes app"
+        action = ResponseProcessor.parse_response(response)
+        assert isinstance(action, WebappAction)
+        assert action.widget_type == "notes"

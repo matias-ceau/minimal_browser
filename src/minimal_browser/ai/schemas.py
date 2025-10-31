@@ -63,8 +63,27 @@ class BookmarkAction(BaseModel):
     content: Optional[str] = None
 
 
+class WebappAction(BaseModel):
+    """Represents a request to render a web application widget.
+    
+    This action instructs the browser to render an interactive widget
+    like a calculator, todo list, timer, or notes app.
+    
+    Attributes:
+        type: Literal discriminator for action type (always "webapp")
+        widget_type: The type of widget to render
+        theme: Visual theme (light/dark/auto, optional)
+        title: Optional custom title for the widget
+    """
+
+    type: Literal["webapp"] = "webapp"
+    widget_type: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+    theme: Optional[str] = None
+    title: Optional[str] = None
+
+
 AIAction = Annotated[
-    Union[NavigateAction, SearchAction, HtmlAction, BookmarkAction],
+    Union[NavigateAction, SearchAction, HtmlAction, BookmarkAction, WebappAction],
     Field(discriminator="type"),
 ]
 """Discriminated union encapsulating the possible AI actions."""

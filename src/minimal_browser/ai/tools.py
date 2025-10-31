@@ -8,7 +8,8 @@ from typing import Tuple, cast
 from pydantic import HttpUrl, ValidationError
 
 from ..rendering.html import ensure_html, wrap_content_as_html
-from .schemas import AIAction, HtmlAction, NavigateAction, SearchAction
+from ..rendering.webapps import render_webapp, parse_webapp_tag
+from .schemas import AIAction, HtmlAction, NavigateAction, SearchAction, WebappAction
 
 
 class ResponseProcessor:
@@ -50,6 +51,8 @@ class ResponseProcessor:
             return "search", response[7:].strip()
         if response.startswith("HTML:"):
             return "html", response[5:].strip()
+        if response.startswith("WEBAPP:"):
+            return "webapp", response[7:].strip()
 
         return ResponseProcessor._intelligent_parse(response, query)
 
@@ -79,14 +82,31 @@ class ResponseProcessor:
             if search_match:
                 return "search", search_match.group(1)
 
+        # Check for webapp indicators
+        webapp_indicators = {
+            "calculator",
+            "todo",
+            "timer",
+            "stopwatch",
+            "notes",
+            "note-taking",
+        }
+        
+        if any(indicator in response_lower for indicator in webapp_indicators):
+            # Try to extract widget type
+            for widget_type in ["calculator", "todo", "timer", "stopwatch", "notes"]:
+                if widget_type in response_lower:
+                    # Map stopwatch to timer
+                    if widget_type == "stopwatch":
+                        widget_type = "timer"
+                    return "webapp", widget_type
+
         html_indicators = {
             "create",
             "make",
             "generate",
             "build",
             "design",
-            "todo",
-            "calculator",
             "form",
             "page",
             "website",
@@ -124,6 +144,30 @@ class ResponseProcessor:
                 html = wrap_content_as_html(payload, query or payload)
                 return HtmlAction(html=html)
 
+        if action_type == "webapp":
+            # Check if payload is a tag like <webapp type="calculator" />
+            if payload.startswith("<webapp"):
+                params = parse_webapp_tag(payload)
+                widget_type = params.get("type", payload)
+                theme = params.get("theme")
+                title = params.get("title")
+            else:
+                # Simple widget type string
+                widget_type = payload
+                theme = None
+                title = None
+            
+            try:
+                return WebappAction(
+                    widget_type=widget_type,
+                    theme=theme,
+                    title=title
+                )
+            except ValidationError:
+                # Fall back to HTML if webapp action is invalid
+                html = wrap_content_as_html(payload, query or payload)
+                return HtmlAction(html=html)
+
         html_payload = ensure_html(payload, query or payload)
         return HtmlAction(html=html_payload)
 
@@ -137,6 +181,14 @@ class ResponseProcessor:
             return action.type, action.query
         if isinstance(action, HtmlAction):
             return action.type, action.html
+        if isinstance(action, WebappAction):
+            # Convert WebappAction to HTML
+            html = render_webapp(
+                action.widget_type,
+                theme=action.theme or "dark",
+                title=action.title
+            )
+            return "html", html
         raise TypeError(f"Unsupported action type: {type(action)!r}")
 
     @staticmethod
