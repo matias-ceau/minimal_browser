@@ -11,8 +11,6 @@ applications and widgets within the browser. It includes:
 
 from __future__ import annotations
 
-import base64
-import json
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
