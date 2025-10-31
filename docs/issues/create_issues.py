@@ -28,7 +28,7 @@ from typing import Dict, List, Optional
 
 # Issue configuration
 REPO = "matias-ceau/minimal_browser"
-ISSUE_DIR = Path("/tmp/placeholder_issues")
+ISSUE_DIR = Path(__file__).parent  # Use the directory where this script is located
 
 ISSUES = [
     {
