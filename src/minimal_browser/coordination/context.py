@@ -128,8 +128,8 @@ class ContextStore:
             scope: defaultdict(list) for scope in ContextScope
         }
         
-        # Subscriptions: pattern -> List[callback]
-        self._subscriptions: Dict[str, List[Callable[[ContextEntry], None]]] = defaultdict(list)
+        # Subscriptions: pattern -> List[(subscription_id, callback)]
+        self._subscriptions: Dict[str, List[tuple[str, Callable[[ContextEntry], None]]]] = defaultdict(list)
         
         # Thread safety
         self._lock = threading.RLock()
