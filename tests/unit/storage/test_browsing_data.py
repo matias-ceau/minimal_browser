@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import sys
 import tempfile
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from pathlib import Path
 
 import pytest
@@ -149,7 +149,7 @@ class TestHistoryStore:
             store.add("https://example.com", "Example")
             
             # Query date range
-            now = datetime.utcnow()
+            now = datetime.now(UTC)
             yesterday = now - timedelta(days=1)
             tomorrow = now + timedelta(days=1)
             
@@ -184,7 +184,7 @@ class TestHistoryStore:
             store.add("https://example.com", "Example")
             
             # Clear entries older than yesterday (should delete nothing)
-            yesterday = datetime.utcnow() - timedelta(days=1)
+            yesterday = datetime.now(UTC) - timedelta(days=1)
             deleted = store.clear(older_than=yesterday)
             
             recent = store.get_recent()

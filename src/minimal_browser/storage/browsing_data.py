@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from pathlib import Path
 from typing import List, Optional
 
@@ -27,7 +27,7 @@ class HistoryEntry(BaseModel):
 
     url: str = Field(description="The visited URL")
     title: str = Field(default="", description="Page title")
-    visit_time: datetime = Field(default_factory=datetime.utcnow, description="Visit timestamp")
+    visit_time: datetime = Field(default_factory=lambda: datetime.now(UTC), description="Visit timestamp")
     visit_count: int = Field(default=1, description="Number of times visited")
     
     class Config:
@@ -48,7 +48,7 @@ class Session(BaseModel):
     """Represents a browser session with multiple tabs."""
 
     name: str = Field(description="Session name/identifier")
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     tabs: List[TabState] = Field(default_factory=list, description="List of tab states")
     active_tab_index: int = Field(default=0, description="Index of active tab")
     
@@ -112,7 +112,7 @@ class HistoryStore:
             url: The visited URL
             title: Page title (optional)
         """
-        visit_time = datetime.utcnow()
+        visit_time = datetime.now(UTC)
         with sqlite3.connect(self.db_path) as conn:
             # Check if URL was recently visited (within last 30 minutes)
             cursor = conn.execute("""
