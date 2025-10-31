@@ -8,7 +8,7 @@ Minimal Browser is a vim-inspired Qt WebEngine shell with a built-in AI copilot.
 
 - **Modal ergonomics:** NORMAL/COMMAND/INSERT modes with familiar vim keybindings.
 - **Native AI assistant:** Structured responses (navigate/search/html) parsed via Pydantic for deterministic actions.
-- **Pluggable engines:** Abstract `WebEngine` contract with a Qt WebEngine implementation today and hooks for GTK/others tomorrow.
+- **Pluggable engines:** Abstract `WebEngine` contract with Qt WebEngine (default) and GTK WebKit (optional) implementations.
 - **Smart rendering:** AI HTML responses rendered via Jinja templates and injected as data URLs for instant previews.
 - **Conversation memory:** Rolling in-memory history plus optional JSON persistence for long-running sessions.
 
@@ -54,6 +54,40 @@ The first run seeds persistent profile data under `~/.minimal-browser/` and conv
 AI models are defined in `src/minimal_browser/ai/models.py`. By default the browser targets `openrouter/openai/gpt-5-codex-preview`, with an automatic fallback to `anthropic/claude-3.5-sonnet` if the preview model is unavailable.
 
 To override the model, adjust the config returned by `AppConfig` (see `src/minimal_browser/config/default_config.py`) or extend the model registry with new entries. Be sure to provide a valid OpenRouter model slug and set the matching API key via `OPENROUTER_API_KEY`.
+
+## 🔧 Web Engine Selection
+
+Minimal Browser supports multiple web engines through a pluggable architecture:
+
+### Qt WebEngine (Default)
+The default engine based on Chromium, providing full web standards support and excellent developer tools. Included with the PySide6 dependency.
+
+### GTK WebKit Engine (Optional)
+An alternative engine for Linux users who prefer GTK over Qt. Provides lighter system dependencies on GTK-based desktops.
+
+**Installation:**
+```bash
+# Debian/Ubuntu
+sudo apt install gir1.2-webkit-6.0 python3-gi
+
+# Arch Linux
+sudo pacman -S webkit2gtk python-gobject
+
+# Fedora/RHEL
+sudo dnf install webkit2gtk4.1 python3-gobject
+```
+
+**Usage:**
+```python
+from minimal_browser.engines.gtk_engine import GtkWebEngine
+
+engine = GtkWebEngine()
+# Pass to VimBrowser during initialization
+```
+
+**Note:** Qt WebEngine is recommended for most users. GTK WebKit is provided as an alternative for specific Linux deployments.
+
+For a detailed comparison of engines, see the [Architecture Documentation](docs/development/ARCHITECTURE.md#9-web-engine-comparison).
 
 ## 🧭 Current Status & Known Gaps
 

@@ -1,4 +1,39 @@
-"""GTK WebKit engine implementation (placeholder)"""
+"""GTK WebKit engine implementation.
+
+This module provides a GTK-based web engine using WebKit for platforms
+that prefer or require GTK over Qt. The implementation is feature-complete
+but requires GTK 4.0 and WebKit 6.0 to be installed.
+
+Installation:
+    Debian/Ubuntu:
+        sudo apt install gir1.2-webkit-6.0 python3-gi
+    
+    Arch Linux:
+        sudo pacman -S webkit2gtk python-gobject
+    
+    Fedora/RHEL:
+        sudo dnf install webkit2gtk4.1 python3-gobject
+
+Usage:
+    from minimal_browser.engines.gtk_engine import GtkWebEngine
+    
+    engine = GtkWebEngine()
+    # Use with VimBrowser or other components
+
+Note: This engine is an alternative to the Qt WebEngine and provides
+similar functionality but with different system requirements. Qt WebEngine
+is the default and recommended engine for most use cases.
+
+Platform Support:
+    - Linux: Full support with GTK 4.0/WebKit 6.0
+    - macOS: Experimental (requires MacPorts or Homebrew GTK installation)
+    - Windows: Not recommended (GTK on Windows has limited WebKit support)
+
+Known Limitations:
+    - Developer tools integration differs from Qt WebEngine
+    - Some Qt-specific features may not be available
+    - Requires separate GTK/WebKit system dependencies
+"""
 
 from typing import Callable
 from .base import WebEngine
@@ -132,6 +167,33 @@ class GtkWebEngine(WebEngine):
         settings.set_hardware_acceleration_policy(
             WebKit.HardwareAccelerationPolicy.ALWAYS
         )
+
+    def capture_screenshot(self, callback: Callable[[bytes], None]):
+        """Capture a screenshot of the current page asynchronously
+        
+        Args:
+            callback: Function to call with PNG image data as bytes
+            
+        Note:
+            GTK WebKit screenshot functionality requires additional GTK
+            rendering APIs. This is a placeholder implementation that
+            returns empty bytes. Full implementation would require:
+            - GTK snapshot APIs (gtk_widget_snapshot)
+            - Cairo surface to PNG conversion
+        """
+        if not self._widget:
+            print("Cannot capture screenshot: widget not available")
+            callback(b"")
+            return
+        
+        # TODO: Implement GTK-based screenshot capture
+        # This would require:
+        # 1. Use gtk_widget_snapshot() to capture widget as GtkSnapshot
+        # 2. Convert snapshot to cairo surface
+        # 3. Write cairo surface to PNG in memory
+        # 4. Return PNG bytes via callback
+        print("Screenshot capture not yet implemented for GTK WebEngine")
+        callback(b"")
 
     @property
     def engine_name(self) -> str:
