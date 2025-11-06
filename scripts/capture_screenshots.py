@@ -3,6 +3,10 @@
 
 This script launches the browser with a virtual display and captures
 screenshots demonstrating key features.
+
+Note: Uses XCB platform (X11) instead of offscreen because we need actual
+rendering for screenshots. The offscreen platform doesn't generate visual
+output suitable for screenshots.
 """
 
 import os
@@ -12,6 +16,7 @@ import subprocess
 from pathlib import Path
 
 # Set up for running with virtual display
+# XCB is needed for screenshot capture; offscreen doesn't render visuals
 os.environ["QT_QPA_PLATFORM"] = "xcb"  # Use X11 for screenshot capture
 os.environ["QT_API"] = "pyside6"
 os.environ["DISPLAY"] = ":99"  # Virtual display
@@ -25,11 +30,15 @@ from minimal_browser.storage.conversations import ConversationLog
 
 
 def wait_for_load(ms: int = 2000):
-    """Wait for page load with event processing."""
+    """Wait for page load with event processing.
+    
+    Uses event processing loop instead of sleep to handle Qt events
+    properly and avoid flaky timing issues.
+    """
     start_time = time.time()
     while (time.time() - start_time) * 1000 < ms:
         QApplication.processEvents()
-        time.sleep(0.1)
+        time.sleep(0.1)  # Small sleep to prevent CPU spinning
 
 
 def capture_screenshot(browser: VimBrowser, filename: str, wait_ms: int = 2000) -> Path:

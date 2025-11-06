@@ -47,11 +47,16 @@ class TestAppLaunch:
 
     @pytest.fixture
     def browser(self, qapp, temp_conversation_log):
-        """Create browser instance for tests."""
+        """Create browser instance for tests.
+        
+        Note: headless=False is used even in offscreen mode because we need
+        the Qt widget tree for testing navigation and UI state. The offscreen
+        platform handles rendering without a display.
+        """
         # Create browser in offscreen mode
         browser = VimBrowser(
             conversation_log=temp_conversation_log,
-            headless=False  # We need the UI for screenshots
+            headless=False  # Need widget tree for testing, offscreen handles display
         )
         browser.resize(1280, 720)  # Set reasonable size
         yield browser

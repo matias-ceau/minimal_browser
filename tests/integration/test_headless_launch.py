@@ -33,12 +33,16 @@ def qapp():
 
 @pytest.mark.integration
 def test_app_can_instantiate(qapp):
-    """Test that the app can be instantiated without errors."""
+    """Test that the app can be instantiated without errors.
+    
+    Note: headless=False is used because we need the Qt widget tree for testing.
+    The offscreen QT_QPA_PLATFORM handles rendering without a display.
+    """
     with tempfile.TemporaryDirectory() as tmpdir:
         log_path = Path(tmpdir) / "test_conversations.json"
         conv_log = ConversationLog(path=str(log_path))
         
-        # Create browser instance
+        # Create browser instance (offscreen via QT_QPA_PLATFORM env var)
         browser = VimBrowser(conversation_log=conv_log, headless=False)
         
         # Verify it was created
