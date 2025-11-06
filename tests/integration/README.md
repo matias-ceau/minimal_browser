@@ -2,9 +2,51 @@
 
 This directory contains integration tests that verify the browser works end-to-end.
 
+## Test Files
+
+### test_headless_launch.py
+Headless tests that prove the app can launch and function without a display.
+These tests work in CI environments using Qt's offscreen platform.
+
+**Tests:**
+- App instantiation
+- Initial state verification
+- URL navigation
+- Modal interface (NORMAL/COMMAND/INSERT modes)
+- Help screen accessibility
+
+**Running:**
+```bash
+QT_QPA_PLATFORM=offscreen pytest tests/integration/test_headless_launch.py -v
+```
+
+### test_app_launch.py
+Full integration tests with screenshot capture for documentation.
+Requires a display or virtual framebuffer.
+
+**Tests:**
+- Browser window launch
+- Initial state verification
+- Screenshot capture of key features
+- Navigation functionality
+- Help screen rendering
+- Modal interface demonstration
+
+**Running:**
+```bash
+# With actual display
+pytest tests/integration/test_app_launch.py -v
+
+# With virtual framebuffer (Xvfb)
+xvfb-run pytest tests/integration/test_app_launch.py -v
+
+# With offscreen rendering
+QT_QPA_PLATFORM=offscreen pytest tests/integration/test_app_launch.py -v
+```
+
 ## Limitations
 
-The integration tests require a display server and Qt graphics libraries that are not available in CI environments. Specifically, PySide6 requires:
+Some integration tests require Qt graphics libraries and may not work in all CI environments. Specifically, PySide6 requires:
 - libEGL.so.1 (OpenGL ES library)
 - A display server (X11, Wayland, or offscreen rendering support)
 
@@ -16,23 +58,31 @@ To run these tests on your local machine:
 # Install system dependencies (Ubuntu/Debian)
 sudo apt-get install libegl1 libxkbcommon-x11-0 libxcb-cursor0
 
-# Run with offscreen platform
+# Run all integration tests with offscreen platform
 QT_QPA_PLATFORM=offscreen pytest tests/integration/ -v
 
-# Or with actual display
+# Run with actual display
 pytest tests/integration/ -v
+
+# Run specific test file
+pytest tests/integration/test_headless_launch.py -v
 ```
 
 ## What These Tests Verify
 
-- **test_browser_smoke.py**:
-  - Browser can be instantiated
-  - Modules can be imported
-  - URL building works
-  - AI action parsing works
-  - Conversation storage works
-  - Screenshot capability exists
-  - (When display available) Full browser renders and captures screenshots
+### Core Functionality
+- ✅ Browser can be instantiated
+- ✅ Initial state is correct (NORMAL mode, empty buffer)
+- ✅ URL navigation works
+- ✅ Modal interface functions (vim-like modes)
+- ✅ Help screen can be displayed
+- ✅ Browser doesn't crash on basic operations
+
+### Screenshot Capture (when display available)
+- Browser UI rendering
+- Web page display
+- Help screen documentation
+- Different browser states
 
 ## CI Testing Strategy
 
