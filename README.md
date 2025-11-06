@@ -12,6 +12,30 @@ Minimal Browser is a vim-inspired Qt WebEngine shell with a built-in AI copilot.
 - **Smart rendering:** AI HTML responses rendered via Jinja templates and injected as data URLs for instant previews.
 - **Conversation memory:** Rolling in-memory history plus optional JSON persistence for long-running sessions.
 
+## 📸 Screenshots
+
+### Browser Launch
+The browser starts with a clean, minimal interface. Here it's showing the default Google homepage:
+
+![Browser Launch](assets/screenshots/01_browser_launch.png)
+
+### Web Navigation
+Navigate to any website using vim-like commands. Example.com rendered in the browser:
+
+![Example.com](assets/screenshots/02_example_com.png)
+
+### Full Website Rendering
+The browser handles complex modern websites. Here's Python.org with full JavaScript support:
+
+![Python.org](assets/screenshots/03_python_org.png)
+
+### Built-in Help System
+Press `?` to access the comprehensive help screen with all keybindings and commands:
+
+![Help Screen](assets/screenshots/04_help_screen.png)
+
+*These screenshots were captured automatically using integration tests. See `tests/integration/` for details.*
+
 ## 🧱 Project Layout
 
 ```text
@@ -91,10 +115,10 @@ For a detailed comparison of engines, see the [Architecture Documentation](docs/
 
 ## 🧭 Current Status & Known Gaps
 
-The codebase is evolving quickly. Key gaps we plan to address next:
+The codebase is evolving quickly. Recent improvements and remaining gaps:
 
-1. **Docs & onboarding:** This README and `ARCHITECTURE.md` are brand new—expect further polish, screenshots, and task-based guides.
-2. **Testing baseline:** Unit tests exist for AI parsing, rendering, and storage (58 tests). Integration tests and UI component tests are planned.
+1. **✅ Testing & Screenshots:** Integration tests now verify the app launches successfully. Screenshots demonstrate core features (see above).
+2. **Testing coverage:** Unit tests cover AI parsing, rendering, and storage (58+ tests). Headless integration tests verify browser functionality. UI-specific tests are in progress.
 3. **AI UX resiliency:** Errors fall back to notifications; retries and offline modes still need design.
 4. **Security review:** Qt WebEngine settings allow local content to access remote URLs and disable XSS auditing for AI-generated HTML. Documenting and tightening this behavior is on the roadmap.
 5. **Optional dependency slimming:** Packages like `boto3` and `chromadb` are currently hard dependencies even though their integrations are optional.
