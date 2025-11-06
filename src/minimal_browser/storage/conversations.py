@@ -61,4 +61,3 @@ class ConversationLog:
 
     def save(self) -> None:
         write_json(self.path, self._entries)
-        pass  # Placeholder for future implementation
