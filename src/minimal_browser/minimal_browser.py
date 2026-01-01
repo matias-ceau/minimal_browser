@@ -389,14 +389,6 @@ class VimBrowser(QMainWindow):
         QTimer.singleShot(timeout, status_bar.hide)
 
     def setup_keybindings(self):
-        # #region agent log
-        import json
-        import os
-        log_dir = "/home/matias/git/matias-ceau/minimal_browser/.cursor"
-        os.makedirs(log_dir, exist_ok=True)
-        with open("/home/matias/git/matias-ceau/minimal_browser/.cursor/debug.log", "a") as f:
-            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"minimal_browser.py:370","message":"setup_keybindings called","data":{"mode":self.mode},"timestamp":int(__import__("time").time()*1000)})+"\n")
-        # #endregion
         # Escape key - always goes to normal mode
         QShortcut(QKeySequence("Escape"), self, self.normal_mode)
 
@@ -425,31 +417,10 @@ class VimBrowser(QMainWindow):
         QShortcut(QKeySequence("Ctrl+W"), self, self.close_buffer)
         QShortcut(QKeySequence("Ctrl+R"), self, self.reload_page)
         QShortcut(QKeySequence("Ctrl+Tab"), self, self.next_buffer)
-        # #region agent log
-        with open("/home/matias/git/matias-ceau/minimal_browser/.cursor/debug.log", "a") as f:
-            f.write(json.dumps({"sessionId":"debug-session","runId":"post-fix","hypothesisId":"A","location":"minimal_browser.py:400","message":"setup_keybindings completed - Space handled directly in keyPressEvent","data":{"has_space_shortcut":False,"handled_in_keypressevent":True},"timestamp":int(__import__("time").time()*1000)})+"\n")
-        # #endregion
 
     def keyPressEvent(self, event):
-        # #region agent log
-        import json
-        import os
-        log_dir = "/home/matias/git/matias-ceau/minimal_browser/.cursor"
-        os.makedirs(log_dir, exist_ok=True)
-        key_text = event.text()
-        with open("/home/matias/git/matias-ceau/minimal_browser/.cursor/debug.log", "a") as f:
-            f.write(json.dumps({"sessionId":"debug-session","runId":"post-fix","hypothesisId":"B","location":"minimal_browser.py:404","message":"keyPressEvent received","data":{"key":key_text,"keyCode":event.key(),"mode":self.mode,"hasFocus":self.hasFocus()},"timestamp":int(__import__("time").time()*1000)})+"\n")
-        # #endregion
         if self.mode == "NORMAL":
             key = event.text()
-            # #region agent log
-            if key == " ":
-                import os
-                log_dir = "/home/matias/git/matias-ceau/minimal_browser/.cursor"
-                os.makedirs(log_dir, exist_ok=True)
-                with open("/home/matias/git/matias-ceau/minimal_browser/.cursor/debug.log", "a") as f:
-                    f.write(json.dumps({"sessionId":"debug-session","runId":"post-fix","hypothesisId":"B","location":"minimal_browser.py:424","message":"Space key detected in NORMAL mode","data":{"key":key,"mode":self.mode},"timestamp":int(__import__("time").time()*1000)})+"\n")
-            # #endregion
             # Handle "?" key directly in keyPressEvent - more reliable in Wayland than QShortcut
             if key == "?":
                 event.accept()  # Accept the event to prevent further processing
@@ -458,13 +429,6 @@ class VimBrowser(QMainWindow):
             # Handle Space key directly in keyPressEvent - more reliable in Wayland than QShortcut
             if key == " ":
                 event.accept()  # Accept the event to prevent further processing
-                # #region agent log
-                import os
-                log_dir = "/home/matias/git/matias-ceau/minimal_browser/.cursor"
-                os.makedirs(log_dir, exist_ok=True)
-                with open("/home/matias/git/matias-ceau/minimal_browser/.cursor/debug.log", "a") as f:
-                    f.write(json.dumps({"sessionId":"debug-session","runId":"post-fix","hypothesisId":"B","location":"minimal_browser.py:437","message":"Space key handling directly in keyPressEvent","data":{"key":key,"mode":self.mode},"timestamp":int(__import__("time").time()*1000)})+"\n")
-                # #endregion
                 self.ai_chat_mode()
                 return
             key_lower = key.lower()
@@ -553,21 +517,9 @@ class VimBrowser(QMainWindow):
         self._start_ai_request(query, mode="chat")
 
     def ai_chat_mode(self):
-        # #region agent log
-        import json
-        import os
-        log_dir = "/home/matias/git/matias-ceau/minimal_browser/.cursor"
-        os.makedirs(log_dir, exist_ok=True)
-        with open("/home/matias/git/matias-ceau/minimal_browser/.cursor/debug.log", "a") as f:
-            f.write(json.dumps({"sessionId":"debug-session","runId":"post-fix","hypothesisId":"C","location":"minimal_browser.py:530","message":"ai_chat_mode called","data":{"current_mode":self.mode},"timestamp":int(__import__("time").time()*1000)})+"\n")
-        # #endregion
         if self.mode == "NORMAL":
             self.mode = "AI_CHAT"
             self.show_command_line("🤖 ")
-            # #region agent log
-            with open("/home/matias/git/matias-ceau/minimal_browser/.cursor/debug.log", "a") as f:
-                f.write(json.dumps({"sessionId":"debug-session","runId":"post-fix","hypothesisId":"C","location":"minimal_browser.py:534","message":"ai_chat_mode executed successfully","data":{"new_mode":self.mode},"timestamp":int(__import__("time").time()*1000)})+"\n")
-            # #endregion
 
     def _safe_show_help(self):
         """Wrapper for show_help that catches all exceptions to prevent crashes"""
