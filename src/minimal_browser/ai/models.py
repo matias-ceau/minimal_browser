@@ -18,8 +18,17 @@ class AIModel:
     def resolved_model_id(self) -> str:
         """Return the provider-aware model identifier for API usage."""
         identifier = self.model_id or self.name
-        if self.provider == "openrouter" and not identifier.startswith("openrouter/"):
-            return f"openrouter/{identifier}"
+        # For OpenRouter with pydantic-ai, use format "openrouter:model-name"
+        # (colon separator, not slash)
+        if self.provider == "openrouter":
+            # If identifier already starts with "openrouter:", return as-is
+            if identifier.startswith("openrouter:"):
+                return identifier
+            # If identifier starts with "openrouter/", convert to colon format
+            if identifier.startswith("openrouter/"):
+                return identifier.replace("openrouter/", "openrouter:", 1)
+            # Otherwise, prepend "openrouter:" (e.g., "openai/gpt-5-codex-preview" -> "openrouter:openai/gpt-5-codex-preview")
+            return f"openrouter:{identifier}"
         return identifier
 
 

@@ -73,6 +73,8 @@ class VimBrowser(QMainWindow):
         self.engine = QtWebEngine() if not headless else None
         self._dev_tools_window: Optional[QWebEngineView] = None
         self.initial_load = True
+        self._pending_url_timer: Optional[QTimer] = None
+        self._url_load_sequence = 0
         self._init_ai_overlay()
         self._init_profile_and_browser()
         self._init_status_bar()
@@ -661,8 +663,24 @@ class VimBrowser(QMainWindow):
         self.raise_()
         self.activateWindow()
         
+        # Cancel any pending URL load timer to prevent race conditions
+        if self._pending_url_timer is not None:
+            self._pending_url_timer.stop()
+            self._pending_url_timer = None
+        
+        # Increment sequence number to track the current load request
+        self._url_load_sequence += 1
+        current_sequence = self._url_load_sequence
+        
         # Wayland-compatible loading: Use setHtml() for data URLs, load() for regular URLs
         def load_content():
+            # Verify this timer is still valid (no newer navigation has occurred)
+            if current_sequence != self._url_load_sequence:
+                return  # A newer navigation has occurred, ignore this delayed load
+            
+            # Clear the pending timer reference since we're executing now
+            self._pending_url_timer = None
+            
             if html_content is not None:
                 # Use setHtml() for data URLs - more reliable in Wayland
                 if self.initial_load:
@@ -682,7 +700,11 @@ class VimBrowser(QMainWindow):
         
         # For data URLs in Wayland, use a small delay to ensure window is ready
         if url.startswith("data:") and html_content is not None:
-            QTimer.singleShot(50, load_content)  # 50ms delay for Wayland compatibility
+            timer = QTimer()
+            timer.setSingleShot(True)
+            timer.timeout.connect(load_content)
+            timer.start(50)  # 50ms delay for Wayland compatibility
+            self._pending_url_timer = timer
         else:
             load_content()
         self.update_title()
