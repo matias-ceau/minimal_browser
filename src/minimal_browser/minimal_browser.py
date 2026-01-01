@@ -8,8 +8,8 @@ import base64
 from typing import MutableMapping, Optional, cast
 
 
-from PySide6.QtCore import QUrl, Qt, QTimer
-from PySide6.QtGui import QKeySequence, QShortcut
+from PySide6.QtCore import QUrl, Qt, QTimer, QEvent
+from PySide6.QtGui import QKeySequence, QShortcut, QKeyEvent
 from PySide6.QtWidgets import (
     QMainWindow,
     QVBoxLayout,
@@ -48,6 +48,23 @@ def to_data_url(html: str) -> str:
 
 
 OS_ENV: MutableMapping[str, str] = cast(MutableMapping[str, str], os.environ)  # type: ignore[attr-defined]
+
+
+# Command registry for vim command autocomplete
+VIM_COMMANDS = {
+    "q": "Quit application",
+    "quit": "Quit application",
+    "w": "Write (no-op)",
+    "write": "Write (no-op)",
+    "wq": "Write and quit",
+    "help": "Show help",
+    "h": "Show help",
+    "e": "Open URL (e <url>)",
+    "b": "Show buffers",
+    "bd": "Close buffer",
+    "bn": "Next buffer",
+    "bp": "Previous buffer",
+}
 
 
 class VimBrowser(QMainWindow):
@@ -191,6 +208,10 @@ class VimBrowser(QMainWindow):
         self.command_line = self.command_palette.input
         self.command_palette.hide()
         self.command_line.returnPressed.connect(self.execute_command)
+        # Connect text changes to update autocomplete
+        self.command_line.textChanged.connect(self._on_command_text_changed)
+        # Install event filter for keyboard navigation
+        self.command_line.installEventFilter(self)
 
     def _position_command_palette(self) -> None:
         if not hasattr(self, "command_palette"):
@@ -368,6 +389,14 @@ class VimBrowser(QMainWindow):
         QTimer.singleShot(timeout, status_bar.hide)
 
     def setup_keybindings(self):
+        # #region agent log
+        import json
+        import os
+        log_dir = "/home/matias/git/matias-ceau/minimal_browser/.cursor"
+        os.makedirs(log_dir, exist_ok=True)
+        with open("/home/matias/git/matias-ceau/minimal_browser/.cursor/debug.log", "a") as f:
+            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"minimal_browser.py:370","message":"setup_keybindings called","data":{"mode":self.mode},"timestamp":int(__import__("time").time()*1000)})+"\n")
+        # #endregion
         # Escape key - always goes to normal mode
         QShortcut(QKeySequence("Escape"), self, self.normal_mode)
 
@@ -388,6 +417,7 @@ class VimBrowser(QMainWindow):
         QShortcut(QKeySequence("n"), self, self.next_buffer)
         QShortcut(QKeySequence("p"), self, self.prev_buffer)
         QShortcut(QKeySequence("o"), self, self.open_prompt)
+        # Note: Space key handled directly in keyPressEvent - more reliable in Wayland than QShortcut
         QShortcut(QKeySequence("t"), self, self.new_buffer)
         QShortcut(QKeySequence("x"), self, self.close_buffer)
         QShortcut(QKeySequence("q"), self, self.quit_if_normal)
@@ -395,14 +425,47 @@ class VimBrowser(QMainWindow):
         QShortcut(QKeySequence("Ctrl+W"), self, self.close_buffer)
         QShortcut(QKeySequence("Ctrl+R"), self, self.reload_page)
         QShortcut(QKeySequence("Ctrl+Tab"), self, self.next_buffer)
+        # #region agent log
+        with open("/home/matias/git/matias-ceau/minimal_browser/.cursor/debug.log", "a") as f:
+            f.write(json.dumps({"sessionId":"debug-session","runId":"post-fix","hypothesisId":"A","location":"minimal_browser.py:400","message":"setup_keybindings completed - Space handled directly in keyPressEvent","data":{"has_space_shortcut":False,"handled_in_keypressevent":True},"timestamp":int(__import__("time").time()*1000)})+"\n")
+        # #endregion
 
     def keyPressEvent(self, event):
+        # #region agent log
+        import json
+        import os
+        log_dir = "/home/matias/git/matias-ceau/minimal_browser/.cursor"
+        os.makedirs(log_dir, exist_ok=True)
+        key_text = event.text()
+        with open("/home/matias/git/matias-ceau/minimal_browser/.cursor/debug.log", "a") as f:
+            f.write(json.dumps({"sessionId":"debug-session","runId":"post-fix","hypothesisId":"B","location":"minimal_browser.py:404","message":"keyPressEvent received","data":{"key":key_text,"keyCode":event.key(),"mode":self.mode,"hasFocus":self.hasFocus()},"timestamp":int(__import__("time").time()*1000)})+"\n")
+        # #endregion
         if self.mode == "NORMAL":
             key = event.text()
+            # #region agent log
+            if key == " ":
+                import os
+                log_dir = "/home/matias/git/matias-ceau/minimal_browser/.cursor"
+                os.makedirs(log_dir, exist_ok=True)
+                with open("/home/matias/git/matias-ceau/minimal_browser/.cursor/debug.log", "a") as f:
+                    f.write(json.dumps({"sessionId":"debug-session","runId":"post-fix","hypothesisId":"B","location":"minimal_browser.py:424","message":"Space key detected in NORMAL mode","data":{"key":key,"mode":self.mode},"timestamp":int(__import__("time").time()*1000)})+"\n")
+            # #endregion
             # Handle "?" key directly in keyPressEvent - more reliable in Wayland than QShortcut
             if key == "?":
                 event.accept()  # Accept the event to prevent further processing
                 self._safe_show_help()
+                return
+            # Handle Space key directly in keyPressEvent - more reliable in Wayland than QShortcut
+            if key == " ":
+                event.accept()  # Accept the event to prevent further processing
+                # #region agent log
+                import os
+                log_dir = "/home/matias/git/matias-ceau/minimal_browser/.cursor"
+                os.makedirs(log_dir, exist_ok=True)
+                with open("/home/matias/git/matias-ceau/minimal_browser/.cursor/debug.log", "a") as f:
+                    f.write(json.dumps({"sessionId":"debug-session","runId":"post-fix","hypothesisId":"B","location":"minimal_browser.py:437","message":"Space key handling directly in keyPressEvent","data":{"key":key,"mode":self.mode},"timestamp":int(__import__("time").time()*1000)})+"\n")
+                # #endregion
+                self.ai_chat_mode()
                 return
             key_lower = key.lower()
             if key_lower in [
@@ -424,7 +487,6 @@ class VimBrowser(QMainWindow):
                 "d",
                 "u",
                 "g",
-                " ",
             ]:
                 # Let shortcuts handle these
                 pass
@@ -491,9 +553,21 @@ class VimBrowser(QMainWindow):
         self._start_ai_request(query, mode="chat")
 
     def ai_chat_mode(self):
+        # #region agent log
+        import json
+        import os
+        log_dir = "/home/matias/git/matias-ceau/minimal_browser/.cursor"
+        os.makedirs(log_dir, exist_ok=True)
+        with open("/home/matias/git/matias-ceau/minimal_browser/.cursor/debug.log", "a") as f:
+            f.write(json.dumps({"sessionId":"debug-session","runId":"post-fix","hypothesisId":"C","location":"minimal_browser.py:530","message":"ai_chat_mode called","data":{"current_mode":self.mode},"timestamp":int(__import__("time").time()*1000)})+"\n")
+        # #endregion
         if self.mode == "NORMAL":
             self.mode = "AI_CHAT"
             self.show_command_line("🤖 ")
+            # #region agent log
+            with open("/home/matias/git/matias-ceau/minimal_browser/.cursor/debug.log", "a") as f:
+                f.write(json.dumps({"sessionId":"debug-session","runId":"post-fix","hypothesisId":"C","location":"minimal_browser.py:534","message":"ai_chat_mode executed successfully","data":{"new_mode":self.mode},"timestamp":int(__import__("time").time()*1000)})+"\n")
+            # #endregion
 
     def _safe_show_help(self):
         """Wrapper for show_help that catches all exceptions to prevent crashes"""
@@ -528,11 +602,44 @@ class VimBrowser(QMainWindow):
             self._position_command_palette()
         if hasattr(self, "command_line"):
             self.command_line.setFocus()
+            # Update suggestions if in command mode with colon prefix
+            if prefix == ":":
+                self.command_palette.update_suggestions("", VIM_COMMANDS)
         self.update_title()
+
+    def _on_command_text_changed(self, text: str) -> None:
+        """Handle text changes in command line for autocomplete"""
+        if self.active_command_prefix == ":" and hasattr(self, "command_palette"):
+            self.command_palette.update_suggestions(text, VIM_COMMANDS)
+
+    def eventFilter(self, obj, event) -> bool:
+        """Event filter for handling keyboard navigation in command line"""
+        if obj == self.command_line and event.type() == QEvent.Type.KeyPress:
+            key_event = QKeyEvent(event)
+            key = key_event.key()
+            
+            # Only handle navigation when in command mode with colon prefix
+            if self.active_command_prefix == ":" and hasattr(self, "command_palette"):
+                if key == Qt.Key.Key_Up:
+                    self.command_palette.navigate_suggestions(-1)
+                    return True
+                elif key == Qt.Key.Key_Down:
+                    self.command_palette.navigate_suggestions(1)
+                    return True
+                elif key == Qt.Key.Key_Tab:
+                    # Complete with selected suggestion
+                    selected = self.command_palette.select_suggestion()
+                    if selected:
+                        return True
+                # Note: Enter key is handled by returnPressed signal, which calls execute_command()
+                # execute_command() already checks for selected suggestions
+        
+        return super().eventFilter(obj, event)
 
     def execute_command(self) -> None:
         raw_text = self.command_line.text()
         prefix = self.active_command_prefix or ""
+        
         content = raw_text.strip()
 
         if prefix:
