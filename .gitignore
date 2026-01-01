@@ -21,3 +21,6 @@ htmlcov/
 .tox/
 coverage.xml
 *.cover
+
+# Debug and development files
+.cursor/

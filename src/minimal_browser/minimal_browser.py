@@ -595,7 +595,7 @@ class VimBrowser(QMainWindow):
                     if selected:
                         return True
                 # Note: Enter key is handled by returnPressed signal, which calls execute_command()
-                # execute_command() already checks for selected suggestions
+                # execute_command() checks for selected suggestions and uses them if available
         
         return super().eventFilter(obj, event)
 
@@ -603,7 +603,17 @@ class VimBrowser(QMainWindow):
         raw_text = self.command_line.text()
         prefix = self.active_command_prefix or ""
         
-        content = raw_text.strip()
+        # Check for selected autocomplete suggestion when in command mode
+        # If user navigated to a suggestion with arrow keys, use that instead of typed text
+        if prefix == ":" and hasattr(self, "command_palette"):
+            selected_cmd = self.command_palette.get_selected_command()
+            if selected_cmd and self.command_palette.suggestion_list.isVisible():
+                # Use the selected suggestion instead of the typed text
+                content = selected_cmd.strip()
+            else:
+                content = raw_text.strip()
+        else:
+            content = raw_text.strip()
 
         if prefix:
             command = prefix + content
