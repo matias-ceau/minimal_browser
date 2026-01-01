@@ -75,7 +75,7 @@ The first run seeds persistent profile data under `~/.minimal-browser/` and conv
 
 ## 🤖 AI Configuration
 
-AI models are defined in `src/minimal_browser/ai/models.py`. By default the browser targets `openrouter/openai/gpt-5-codex-preview`, with an automatic fallback to `anthropic/claude-3.5-sonnet` if the preview model is unavailable.
+AI models are defined in `src/minimal_browser/ai/models.py`. By default the browser targets `openrouter/openai/gpt-5.2`, with an automatic fallback to `openrouter/anthropic/claude-opus-4.5` if the primary model is unavailable.
 
 To override the model, adjust the config returned by `AppConfig` (see `src/minimal_browser/config/default_config.py`) or extend the model registry with new entries. Be sure to provide a valid OpenRouter model slug and set the matching API key via `OPENROUTER_API_KEY`.
 

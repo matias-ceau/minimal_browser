@@ -52,7 +52,7 @@ Minimal Browser is a modal, vim-inspired Qt WebEngine shell with a tightly integ
 
 1. **User input** (vim commands, AI prompt) is captured by `VimBrowser` and, for AI queries, dispatched to `AIWorker`.
 2. **AIWorker** builds a structured prompt via `StructuredBrowserAgent`, which calls OpenRouter/OpenAI.
-3. **StructuredBrowserAgent** enforces `AIAction` output using `pydantic-ai`. When OpenRouter rejects a preferred model, it automatically falls back to `claude-4-sonnet` and logs a notice.
+3. **StructuredBrowserAgent** enforces `AIAction` output using `pydantic-ai`. When OpenRouter rejects a preferred model, it automatically falls back to `claude-opus-4.5` and logs a notice.
 4. **ResponseProcessor** interprets the model's string payload (prefix-based or heuristics) into typed `AIAction` instances.
 5. **rendering.artifacts.URLBuilder** translates actions into concrete destinations: direct URLs, search queries, or base64 data URLs produced by `rendering.html.create_data_url`.
 6. **VimBrowser** loads the destination into the active WebEngine instance, updates the UI, and records the interaction in `ConversationLog` and `ConversationMemory`.

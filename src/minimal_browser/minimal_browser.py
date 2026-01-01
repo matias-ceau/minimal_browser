@@ -218,10 +218,18 @@ class VimBrowser(QMainWindow):
             return
         width = min(480, self.width() - 60)
         width = max(width, 300)
+        # Get size hint - this now includes suggestion list height if visible
         height = self.command_palette.sizeHint().height()
         self.command_palette.resize(width, height)
         x = (self.width() - width) // 2
         y = self.height() - height - 60
+        
+        # If palette would go below window when expanded, adjust upward
+        if y + height > self.height():
+            # Adjust y upward to fit everything
+            y = self.height() - height - 60
+            y = max(40, y)  # Don't go above top margin
+        
         self.command_palette.move(max(20, x), max(40, y))
 
     def _init_mode_timer(self):
@@ -389,14 +397,6 @@ class VimBrowser(QMainWindow):
         QTimer.singleShot(timeout, status_bar.hide)
 
     def setup_keybindings(self):
-        # #region agent log
-        import json
-        import os
-        log_dir = "/home/matias/git/matias-ceau/minimal_browser/.cursor"
-        os.makedirs(log_dir, exist_ok=True)
-        with open("/home/matias/git/matias-ceau/minimal_browser/.cursor/debug.log", "a") as f:
-            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"minimal_browser.py:370","message":"setup_keybindings called","data":{"mode":self.mode},"timestamp":int(__import__("time").time()*1000)})+"\n")
-        # #endregion
         # Escape key - always goes to normal mode
         QShortcut(QKeySequence("Escape"), self, self.normal_mode)
 
@@ -478,6 +478,9 @@ class VimBrowser(QMainWindow):
         self.mode = "NORMAL"
         if hasattr(self, "command_palette"):
             self.command_palette.hide()
+            # Hide suggestion list when palette is hidden
+            if hasattr(self.command_palette, "suggestion_list"):
+                self.command_palette.suggestion_list.hide()
         if hasattr(self, "command_line"):
             self.command_line.clear()
         self.active_command_prefix = None
@@ -525,21 +528,9 @@ class VimBrowser(QMainWindow):
         self._start_ai_request(query, mode="chat")
 
     def ai_chat_mode(self):
-        # #region agent log
-        import json
-        import os
-        log_dir = "/home/matias/git/matias-ceau/minimal_browser/.cursor"
-        os.makedirs(log_dir, exist_ok=True)
-        with open("/home/matias/git/matias-ceau/minimal_browser/.cursor/debug.log", "a") as f:
-            f.write(json.dumps({"sessionId":"debug-session","runId":"post-fix","hypothesisId":"C","location":"minimal_browser.py:530","message":"ai_chat_mode called","data":{"current_mode":self.mode},"timestamp":int(__import__("time").time()*1000)})+"\n")
-        # #endregion
         if self.mode == "NORMAL":
             self.mode = "AI_CHAT"
             self.show_command_line("🤖 ")
-            # #region agent log
-            with open("/home/matias/git/matias-ceau/minimal_browser/.cursor/debug.log", "a") as f:
-                f.write(json.dumps({"sessionId":"debug-session","runId":"post-fix","hypothesisId":"C","location":"minimal_browser.py:534","message":"ai_chat_mode executed successfully","data":{"new_mode":self.mode},"timestamp":int(__import__("time").time()*1000)})+"\n")
-            # #endregion
 
     def _safe_show_help(self):
         """Wrapper for show_help that catches all exceptions to prevent crashes"""

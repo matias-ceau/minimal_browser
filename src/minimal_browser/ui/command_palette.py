@@ -2,7 +2,7 @@
 
 from typing import Optional
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QListWidget,
     QListWidgetItem,
+    QSizePolicy,
 )
 
 from ..config.default_config import DEFAULT_CONFIG
@@ -46,6 +47,8 @@ class CommandPalette(QWidget):
 
         self.mode_label = QLabel("Command Mode")
         self.mode_label.setObjectName("CommandLabel")
+        self.mode_label.setWordWrap(False)
+        self.mode_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
 
         header.addWidget(self.icon_label)
         header.addWidget(self.mode_label)
@@ -56,7 +59,7 @@ class CommandPalette(QWidget):
         self.input.setClearButtonEnabled(True)
         self.input.setPlaceholderText("Run a Vim command (e.g. :help)")
 
-        # Autocomplete suggestion list
+        # Autocomplete suggestion list - embedded in layout
         self.suggestion_list = QListWidget()
         self.suggestion_list.setObjectName("SuggestionList")
         self.suggestion_list.setMaximumHeight(200)
@@ -80,6 +83,7 @@ class CommandPalette(QWidget):
                 font-weight: 600;
                 letter-spacing: 1.1px;
                 text-transform: uppercase;
+                white-space: nowrap;
             }
             #CommandIcon {
                 font-size: 18px;
@@ -98,30 +102,42 @@ class CommandPalette(QWidget):
                 background-color: rgba(255, 255, 255, 0.12);
             }
             #SuggestionList {
-                background-color: rgba(30, 30, 30, 240);
-                border: 1px solid rgba(255, 255, 255, 0.15);
-                border-radius: 8px;
+                background-color: rgba(20, 20, 20, 220);
+                border-radius: 12px;
+                border: 1px solid rgba(255, 255, 255, 0.12);
                 color: #ffffff;
                 font-size: 13px;
-                padding: 4px;
+                padding: 8px;
                 outline: none;
+                max-height: 200px;
             }
             #SuggestionList::item {
-                padding: 6px 10px;
-                border-radius: 4px;
+                padding: 8px 12px;
+                border-radius: 6px;
                 background-color: transparent;
+                margin: 2px 0;
             }
             #SuggestionList::item:selected {
-                background-color: rgba(134, 84, 204, 0.4);
+                background-color: rgba(134, 84, 204, 0.5);
                 color: #ffffff;
             }
             #SuggestionList::item:hover {
-                background-color: rgba(134, 84, 204, 0.2);
+                background-color: rgba(134, 84, 204, 0.3);
             }
             """
         )
 
         self.setFocusProxy(self.input)
+
+    def sizeHint(self):
+        """Override sizeHint to include suggestion list height when visible"""
+        hint = super().sizeHint()
+        if self.suggestion_list.isVisible() and self.suggestion_list.count() > 0:
+            # Add the suggestion list's preferred height
+            suggestion_height = min(self.suggestion_list.maximumHeight(), 
+                                  self.suggestion_list.count() * 32 + 16)
+            hint.setHeight(hint.height() + suggestion_height)
+        return hint
 
     def configure(self, prefix: str) -> None:
         style = COMMAND_PROMPT_STYLES.get(prefix)
@@ -159,6 +175,7 @@ class CommandPalette(QWidget):
                 font-weight: 600;
                 letter-spacing: 1.1px;
                 text-transform: uppercase;
+                white-space: nowrap;
             }}
             #CommandIcon {{
                 font-size: 18px;
@@ -177,24 +194,27 @@ class CommandPalette(QWidget):
                 background-color: rgba(255, 255, 255, 0.12);
             }}
             #SuggestionList {{
-                background-color: rgba(20, 20, 20, 240);
-                border: 1px solid rgba(255, 255, 255, 0.12);
-                border-radius: 8px;
+                background-color: {bg_color};
+                border-radius: 12px;
+                border: 1px solid {border_color};
                 color: #ffffff;
                 font-size: 13px;
-                padding: 4px;
+                padding: 8px;
+                outline: none;
                 max-height: 200px;
             }}
             #SuggestionList::item {{
-                padding: 6px 10px;
-                border-radius: 4px;
+                padding: 8px 12px;
+                border-radius: 6px;
+                background-color: transparent;
+                margin: 2px 0;
             }}
             #SuggestionList::item:selected {{
-                background-color: rgba(134, 84, 204, 0.6);
+                background-color: rgba(134, 84, 204, 0.5);
                 color: #ffffff;
             }}
             #SuggestionList::item:hover {{
-                background-color: rgba(134, 84, 204, 0.4);
+                background-color: rgba(134, 84, 204, 0.3);
             }}
             """
         )
@@ -203,10 +223,17 @@ class CommandPalette(QWidget):
         """Set the command registry for autocomplete"""
         self.command_registry = commands
 
+
     def update_suggestions(self, text: str, commands: dict[str, str]) -> None:
         """Update suggestion list based on input text"""
         if self.current_prefix != ":":
             self.suggestion_list.hide()
+            self.updateGeometry()
+            self.adjustSize()
+            # Notify parent to reposition
+            parent = self.parent()
+            if parent and hasattr(parent, '_position_command_palette'):
+                QTimer.singleShot(10, parent._position_command_palette)
             return
 
         text = text.strip().lower()
@@ -224,6 +251,12 @@ class CommandPalette(QWidget):
 
         if not matches:
             self.suggestion_list.hide()
+            self.updateGeometry()
+            self.adjustSize()
+            # Notify parent to reposition
+            parent = self.parent()
+            if parent and hasattr(parent, '_position_command_palette'):
+                QTimer.singleShot(10, parent._position_command_palette)
             return
 
         # Sort matches by command name
@@ -236,9 +269,29 @@ class CommandPalette(QWidget):
             self.suggestion_list.addItem(item)
 
         # Show and adjust size
-        self.suggestion_list.show()
         item_count = min(len(matches), 5)  # Show max 5 items
-        self.suggestion_list.setMaximumHeight(item_count * 32 + 8)
+        suggestion_height = item_count * 32 + 8
+        self.suggestion_list.setMaximumHeight(suggestion_height)
+        self.suggestion_list.show()
+        
+        # Force layout to update and palette to resize
+        # The suggestion list is in the layout, so showing it should expand the palette
+        self.updateGeometry()
+        # Force the layout to recalculate
+        self.layout().update()
+        self.layout().activate()
+        
+        # Get the new size hint and explicitly resize if palette is positioned
+        new_hint = self.sizeHint()
+        current_width = self.width()
+        # Only resize if we have a valid width (palette has been positioned)
+        if current_width > 100:
+            self.resize(current_width, new_hint.height())
+        
+        # Notify parent to reposition (if it has a method to do so)
+        parent = self.parent()
+        if parent and hasattr(parent, '_position_command_palette'):
+            QTimer.singleShot(10, parent._position_command_palette)
         
         # Select first item
         if self.suggestion_list.count() > 0:

@@ -7,7 +7,7 @@ from typing import Dict, Iterable, List, Optional
 from pydantic import BaseModel, field_validator
 from pydantic_ai import Agent
 
-from .models import AIModel, DEFAULT_MODEL, get_model
+from .models import AIModel, DEFAULT_MODEL, FALLBACK_MODEL, get_model
 from .schemas import AIAction
 
 
@@ -104,10 +104,10 @@ class StructuredBrowserAgent:
                 fallback = self._get_fallback_model()
                 if fallback is not None:
                     print(
-                        "Requested OpenRouter model unavailable; "
-                        "falling back to 'claude-4-sonnet'."
+                        f"Requested OpenRouter model unavailable; "
+                        f"falling back to '{FALLBACK_MODEL}'."
                     )
-                    self._model_name = "claude-4-sonnet"
+                    self._model_name = FALLBACK_MODEL
                     self._model_config = fallback
                     self._init_agent()
                     return self.run(user_query)
@@ -123,9 +123,9 @@ class StructuredBrowserAgent:
 
     def _get_fallback_model(self) -> Optional[AIModel]:
         """Return a fallback model configuration when available."""
-        if self._model_name == "claude-4-sonnet":
+        if self._model_name == FALLBACK_MODEL:
             return None
-        fallback = get_model("claude-4-sonnet")
+        fallback = get_model(FALLBACK_MODEL)
         if fallback is None or fallback is self._model_config:
             return None
         return fallback

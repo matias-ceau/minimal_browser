@@ -34,6 +34,30 @@ class AIModel:
 
 # Available AI models
 MODELS = {
+    "gpt-5.2": AIModel(
+        name="gpt-5.2",
+        provider="openrouter",
+        max_tokens=8000,
+        supports_streaming=True,
+        cost_per_token=0.000006,
+        model_id="openai/gpt-5.2",
+    ),
+    "claude-opus-4.5": AIModel(
+        name="claude-opus-4.5",
+        provider="openrouter",
+        max_tokens=8000,
+        supports_streaming=True,
+        cost_per_token=0.000005,
+        model_id="anthropic/claude-opus-4.5",
+    ),
+    "gemini-3-pro": AIModel(
+        name="gemini-3-pro",
+        provider="openrouter",
+        max_tokens=8000,
+        supports_streaming=True,
+        cost_per_token=0.000004,
+        model_id="google/gemini-3-pro",
+    ),
     "gpt-5-codex-preview": AIModel(
         name="gpt-5-codex-preview",
         provider="openrouter",
@@ -49,14 +73,6 @@ MODELS = {
         supports_streaming=True,
         cost_per_token=0.000005,
     ),
-    "claude-4-sonnet": AIModel(
-        name="claude-4-sonnet",
-        provider="anthropic",
-        max_tokens=4000,
-        supports_streaming=True,
-        cost_per_token=0.000003,
-        model_id="anthropic/claude-4-sonnet",
-    ),
     "llama-3.1-70b": AIModel(
         name="openrouter/llama-3.1-70b-instruct",
         provider="openrouter",
@@ -67,7 +83,8 @@ MODELS = {
     ),
 }
 
-DEFAULT_MODEL = "gpt-5-codex-preview"
+DEFAULT_MODEL = "gpt-5.2"
+FALLBACK_MODEL = "claude-opus-4.5"
 
 
 def get_model(name: str) -> Optional[AIModel]:
