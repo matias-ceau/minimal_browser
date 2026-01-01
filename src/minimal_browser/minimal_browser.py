@@ -375,6 +375,8 @@ class VimBrowser(QMainWindow):
         QShortcut(QKeySequence("s"), self, self.smart_search_mode)  # Smart search
         QShortcut(QKeySequence("a"), self, self.ai_search_mode)  # AI/LLM search
         QShortcut(QKeySequence("F1"), self, self.show_help)  # Help
+        # Note: "?" keybinding handled in keyPressEvent instead of QShortcut
+        # This avoids Wayland compatibility issues with QKeySequence("?")
         QShortcut(QKeySequence("F10"), self, self.toggle_dev_tools)  # Developer Tools
         QShortcut(QKeySequence("Ctrl+U"), self, self.view_source)  # View Source
         QShortcut(QKeySequence("Ctrl+I"), self, self.show_debug_info)  # Debug Info
@@ -394,8 +396,14 @@ class VimBrowser(QMainWindow):
 
     def keyPressEvent(self, event):
         if self.mode == "NORMAL":
-            key = event.text().lower()
-            if key in [
+            key = event.text()
+            # Handle "?" key directly in keyPressEvent - more reliable in Wayland than QShortcut
+            if key == "?":
+                event.accept()  # Accept the event to prevent further processing
+                self._safe_show_help()
+                return
+            key_lower = key.lower()
+            if key_lower in [
                 ":",
                 "/",
                 "s",
@@ -485,14 +493,29 @@ class VimBrowser(QMainWindow):
             self.mode = "AI_CHAT"
             self.show_command_line("🤖 ")
 
+    def _safe_show_help(self):
+        """Wrapper for show_help that catches all exceptions to prevent crashes"""
+        import traceback
+        try:
+            self.show_help()
+        except Exception as e:
+            print(f"Error showing help: {e}")
+            traceback.print_exc()
+            # Show a notification instead of crashing
+            self._show_notification("Help screen unavailable", timeout=2000)
+
     def show_help(self):
         if self.mode == "NORMAL":
-            help_content = self.get_help_content()
-            encoded_html = base64.b64encode(help_content.encode("utf-8")).decode(
-                "ascii"
-            )
-            help_url = f"data:text/html;base64,{encoded_html}"
-            self.open_url(help_url)
+            try:
+                help_content = self.get_help_content()
+                # Use the existing to_data_url helper which handles encoding properly
+                help_url = to_data_url(help_content)
+                self.open_url(help_url)
+            except Exception as e:
+                import traceback
+                print(f"Error in show_help: {e}")
+                traceback.print_exc()
+                # Don't re-raise to prevent UI crash
 
     def show_command_line(self, prefix: str) -> None:
         self.active_command_prefix = prefix
@@ -601,14 +624,29 @@ class VimBrowser(QMainWindow):
     def open_url(self, url):
         print(f"Opening URL: {url[:100]}...")  # Debug logging
 
-        # Handle data URLs differently
+        # Handle data URLs differently - extract HTML for setHtml() which is more Wayland-compatible
         if url.startswith("data:"):
-            qurl = QUrl(url)
-            print(f"Loading data URL, length: {len(url)}")
+            # Extract HTML from data URL for setHtml() - more reliable in Wayland
+            try:
+                # Parse data:text/html;base64,<data>
+                if "base64," in url:
+                    base64_data = url.split("base64,", 1)[1]
+                    html_content = base64.b64decode(base64_data).decode("utf-8")
+                elif "charset=utf-8;base64," in url:
+                    base64_data = url.split("charset=utf-8;base64,", 1)[1]
+                    html_content = base64.b64decode(base64_data).decode("utf-8")
+                else:
+                    # Fallback to QUrl if we can't parse
+                    qurl = QUrl(url)
+                    html_content = None
+            except Exception:
+                qurl = QUrl(url)
+                html_content = None
         else:
             if not url.startswith(("http://", "https://")):
                 url = "https://" + url
             qurl = QUrl(url)
+            html_content = None
 
         # Add to buffers if not already there
         if url not in self.buffers:
@@ -616,13 +654,37 @@ class VimBrowser(QMainWindow):
             self.current_buffer = len(self.buffers) - 1
         else:
             self.current_buffer = self.buffers.index(url)
-
-        if self.initial_load:
-            self.browser.load(qurl)
-            self.initial_load = False
+        
+        # Wayland fix: Ensure window is shown and activated before loading
+        if not self.isVisible():
+            self.show()
+        self.raise_()
+        self.activateWindow()
+        
+        # Wayland-compatible loading: Use setHtml() for data URLs, load() for regular URLs
+        def load_content():
+            if html_content is not None:
+                # Use setHtml() for data URLs - more reliable in Wayland
+                if self.initial_load:
+                    self.browser.page().setHtml(html_content, QUrl("about:blank"))
+                    self.initial_load = False
+                else:
+                    self.setWindowTitle("Switching...")
+                    self.browser.page().setHtml(html_content, QUrl("about:blank"))
+            else:
+                # Use load() for regular URLs
+                if self.initial_load:
+                    self.browser.load(qurl)
+                    self.initial_load = False
+                else:
+                    self.setWindowTitle("Switching...")
+                    self.browser.load(qurl)
+        
+        # For data URLs in Wayland, use a small delay to ensure window is ready
+        if url.startswith("data:") and html_content is not None:
+            QTimer.singleShot(50, load_content)  # 50ms delay for Wayland compatibility
         else:
-            self.setWindowTitle("Switching...")
-            self.browser.load(qurl)
+            load_content()
         self.update_title()
 
     def reload_page(self):
