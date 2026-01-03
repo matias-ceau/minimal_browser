@@ -1,6 +1,6 @@
 [project]
 name = "minimal-browser"
-version = "0.2.0"
+version = "0.2.0a1"
 description = "Minimal vim-like browser with native AI integration"
 readme = "README.md"
 authors = [{ name = "Matias Ceau", email = "matias@ceau.net" }]
