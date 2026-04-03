@@ -13,7 +13,7 @@ This roadmap summarizes near-term priorities (next 4–6 weeks) and medium-term 
 - BookmarkAction schema for AI-driven bookmark management
 - Page export functionality (HTML, Markdown, PDF) via `export/exporter.py`
 - External browser integration for opening pages in system browsers
-- File browser with semantic search using ChromaDB embeddings
+- File browser with semantic search using FAISS + OpenAI embeddings
 - UI module split with dedicated command palette and AI worker
 - Keyring integration for secure API key storage
 - Unit test coverage for core modules (AI, rendering, storage)
@@ -52,7 +52,7 @@ This roadmap summarizes near-term priorities (next 4–6 weeks) and medium-term 
 
 ### P2 · Storage & Productivity
 - [x] Implement bookmark storage with tags and search
-- [x] Implement file browser with ChromaDB embedding search
+- [x] Implement file browser with FAISS + OpenAI embedding search
 - [x] Add page export to HTML, Markdown, and PDF
 - [ ] Prototype SQLite-backed conversation history with search/filter
 - [ ] Export conversations as Markdown/HTML bundles

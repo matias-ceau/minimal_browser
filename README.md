@@ -63,6 +63,12 @@ src/minimal_browser/
 uv sync
 ```
 
+For optional storage features (FAISS vector search, SQLite key-value storage):
+
+```bash
+uv sync --extra storage
+```
+
 ### Running the Browser
 
 ```bash
@@ -118,10 +124,10 @@ For a detailed comparison of engines, see the [Architecture Documentation](docs/
 The codebase is evolving quickly. Recent improvements and remaining gaps:
 
 1. **✅ Testing & Screenshots:** Integration tests now verify the app launches successfully. Screenshots demonstrate core features (see above).
-2. **Testing coverage:** Unit tests cover AI parsing, rendering, and storage (58+ tests). Headless integration tests verify browser functionality. UI-specific tests are in progress.
+2. **Testing coverage:** Unit tests cover AI parsing, rendering, and storage (104+ tests). Headless integration tests verify browser functionality. UI-specific tests are in progress.
 3. **AI UX resiliency:** Errors fall back to notifications; retries and offline modes still need design.
 4. **Security review:** Qt WebEngine settings allow local content to access remote URLs and disable XSS auditing for AI-generated HTML. Documenting and tightening this behavior is on the roadmap.
-5. **Optional dependency slimming:** Packages like `boto3` and `chromadb` are currently hard dependencies even though their integrations are optional.
+5. **Optional dependencies:** Storage integrations (`faiss-cpu`) are optional and use OpenAI embeddings for semantic search.
 
 For a detailed critique and near-term roadmap, see the **Architecture Roadmap** section in [`ARCHITECTURE.md`](ARCHITECTURE.md).
 

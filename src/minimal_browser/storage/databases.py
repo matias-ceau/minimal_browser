@@ -1,55 +1,265 @@
+"""Lightweight storage implementations using local files, SQLite, and FAISS."""
+
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+import json
+import os
+import sqlite3
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 try:
-    import boto3  # type: ignore[import-untyped]
+    import faiss  # type: ignore[import-untyped]
+    import numpy as np
 except ImportError as exc:  # pragma: no cover - optional dependency guard
     raise ImportError(
-        "boto3 is required for ObjectStorage and KVStorage; install minimal-browser with the 'storage' extras."
+        "faiss-cpu and numpy are required for storage; install minimal-browser with the 'storage' extras."
     ) from exc
 
 try:
-    import chromadb  # type: ignore[import-untyped]
-except ImportError as exc:  # pragma: no cover - optional dependency guard
+    from openai import OpenAI
+except ImportError as exc:  # pragma: no cover
     raise ImportError(
-        "chromadb is required for VectorStorage; install minimal-browser with the 'storage' extras."
+        "openai is required for embeddings; ensure it is installed."
     ) from exc
+
+
+EMBEDDING_MODEL = "text-embedding-3-small"
+EMBEDDING_DIMENSION = 1536
+
+
+def _get_embedding(text: str, client: Optional[OpenAI] = None) -> List[float]:
+    """Generate embedding for text using OpenAI API.
+
+    Args:
+        text: Text to embed
+        client: Optional OpenAI client instance
+
+    Returns:
+        Embedding vector as list of floats
+    """
+    if client is None:
+        client = OpenAI()
+
+    response = client.embeddings.create(model=EMBEDDING_MODEL, input=text)
+    return list(response.data[0].embedding)
 
 
 class ObjectStorage:
-    def __init__(self, bucket_name: str):
-        self.s3 = boto3.client("s3")
-        self.bucket_name = bucket_name
+    """Local file-based object storage."""
+
+    def __init__(self, bucket_name: str, base_path: Optional[Path] = None):
+        """Initialize object storage with a local directory.
+
+        Args:
+            bucket_name: Name of the "bucket" (subdirectory)
+            base_path: Base directory for storage, defaults to ~/.minimal-browser/storage
+        """
+        if base_path is None:
+            base_path = Path.home() / ".minimal-browser" / "storage"
+
+        self.base_path = base_path / bucket_name
+        self.base_path.mkdir(parents=True, exist_ok=True)
 
     def upload(self, key: str, data: bytes) -> None:
-        self.s3.put_object(Bucket=self.bucket_name, Key=key, Body=data)
+        """Store data as a file.
+
+        Args:
+            key: Object key (will be used as filename)
+            data: Binary data to store
+        """
+        file_path = self.base_path / key
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        file_path.write_bytes(data)
 
     def download(self, key: str) -> bytes:
-        response = self.s3.get_object(Bucket=self.bucket_name, Key=key)
-        return response["Body"].read()
+        """Retrieve data from a file.
+
+        Args:
+            key: Object key (filename)
+
+        Returns:
+            Binary data stored at key
+
+        Raises:
+            FileNotFoundError: If key does not exist
+        """
+        file_path = self.base_path / key
+        return file_path.read_bytes()
 
 
 class KVStorage:
-    def __init__(self, table_name: str):
-        self.client = boto3.client("dynamodb")
+    """SQLite-based key-value storage."""
+
+    def __init__(self, table_name: str, db_path: Optional[Path] = None):
+        """Initialize KV storage with SQLite backend.
+
+        Args:
+            table_name: Name of the table to use
+            db_path: Path to SQLite database, defaults to ~/.minimal-browser/kv.db
+        """
+        if db_path is None:
+            db_path = Path.home() / ".minimal-browser" / "kv.db"
+
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        self.db_path = db_path
         self.table_name = table_name
+        self._init_table()
+
+    def _get_conn(self) -> sqlite3.Connection:
+        """Get database connection."""
+        conn = sqlite3.connect(str(self.db_path))
+        conn.row_factory = sqlite3.Row
+        return conn
+
+    def _init_table(self) -> None:
+        """Create table if it doesn't exist."""
+        with self._get_conn() as conn:
+            conn.execute(f"""
+                CREATE TABLE IF NOT EXISTS {self.table_name} (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL
+                )
+            """)
 
     def put_item(self, item: Dict[str, Any]) -> None:
-        self.client.put_item(TableName=self.table_name, Item=item)
+        """Store an item in the database.
+
+        Args:
+            item: Dictionary with 'key' and 'value' keys
+        """
+        key = item.get("key", "")
+        value = json.dumps(item)
+
+        with self._get_conn() as conn:
+            conn.execute(
+                f"INSERT OR REPLACE INTO {self.table_name} (key, value) VALUES (?, ?)",
+                (key, value),
+            )
 
     def get_item(self, key: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        response = self.client.get_item(TableName=self.table_name, Key=key)
-        return response.get("Item")
+        """Retrieve an item by key.
+
+        Args:
+            key: Dictionary containing the key to look up
+
+        Returns:
+            Item dictionary if found, None otherwise
+        """
+        key_value = key.get("key", "")
+
+        with self._get_conn() as conn:
+            cursor = conn.execute(
+                f"SELECT value FROM {self.table_name} WHERE key = ?", (key_value,)
+            )
+            row = cursor.fetchone()
+            if row:
+                return json.loads(row["value"])
+        return None
 
 
 class VectorStorage:
-    def __init__(self, collection_name: str):
-        self.client = chromadb.Client()
-        self.collection = self.client.get_or_create_collection(name=collection_name)
+    """FAISS-based vector storage with OpenAI embeddings."""
 
-    def add_vector(self, vector: str, metadata: Dict[str, Any]) -> None:
-        self.collection.add(documents=[vector], metadatas=[metadata])
+    def __init__(
+        self,
+        collection_name: str,
+        db_path: Optional[Path] = None,
+        client: Optional[OpenAI] = None,
+    ):
+        """Initialize vector storage with FAISS backend.
 
-    def query(self, vector: str, n_results: int = 5) -> Dict[str, Any]:
-        return self.collection.query(queries=[vector], n_results=n_results)
+        Args:
+            collection_name: Name of the collection
+            db_path: Path to store index and metadata, defaults to ~/.minimal-browser/vectors/
+            client: Optional OpenAI client instance
+        """
+        if db_path is None:
+            db_path = Path.home() / ".minimal-browser" / "vectors"
+
+        self.db_path = db_path / collection_name
+        self.db_path.mkdir(parents=True, exist_ok=True)
+        self.collection_name = collection_name
+        self.client = client or OpenAI()
+
+        self.index: Optional[faiss.IndexFlatIP] = None
+        self.metadata: Dict[int, Dict[str, Any]] = {}
+        self.id_counter: int = 0
+
+        self._load_or_create_index()
+
+    def _load_or_create_index(self) -> None:
+        """Load existing index or create new one."""
+        index_path = self.db_path / "index.faiss"
+        meta_path = self.db_path / "metadata.json"
+        counter_path = self.db_path / "counter.json"
+
+        if index_path.exists():
+            self.index = faiss.read_index(str(index_path))
+        else:
+            self.index = faiss.IndexFlatIP(EMBEDDING_DIMENSION)
+
+        if meta_path.exists():
+            self.metadata = json.loads(meta_path.read_text())
+            self.metadata = {int(k): v for k, v in self.metadata.items()}
+
+        if counter_path.exists():
+            self.id_counter = json.loads(counter_path.read_text())
+
+    def _save(self) -> None:
+        """Save index and metadata to disk."""
+        if self.index is None:
+            return
+
+        faiss.write_index(self.index, str(self.db_path / "index.faiss"))
+        (self.db_path / "metadata.json").write_text(json.dumps(self.metadata))
+        (self.db_path / "counter.json").write_text(json.dumps(self.id_counter))
+
+    def add_vector(self, text: str, metadata: Dict[str, Any]) -> None:
+        """Add a vector with associated metadata.
+
+        Args:
+            text: Text to embed and store
+            metadata: Metadata associated with the vector
+        """
+        if self.index is None:
+            return
+
+        embedding = _get_embedding(text, self.client)
+        vector = np.array([embedding], dtype=np.float32)
+
+        faiss.normalize_L2(vector)
+        self.index.add(vector)
+
+        self.metadata[self.id_counter] = metadata
+        self.id_counter += 1
+
+        self._save()
+
+    def query(self, query_text: str, n_results: int = 5) -> Dict[str, Any]:
+        """Query for similar vectors.
+
+        Args:
+            query_text: Text to search for
+            n_results: Number of results to return
+
+        Returns:
+            Dictionary with 'metadatas' and 'distances' keys
+        """
+        if self.index is None or self.index.ntotal == 0:
+            return {"metadatas": [[]], "distances": [[]]}
+
+        embedding = _get_embedding(query_text, self.client)
+        vector = np.array([embedding], dtype=np.float32)
+        faiss.normalize_L2(vector)
+
+        n_results = min(n_results, self.index.ntotal)
+        distances, indices = self.index.search(vector, n_results)
+
+        metadatas = [
+            self.metadata.get(int(idx), {})
+            for idx in indices[0]
+            if int(idx) in self.metadata
+        ]
+
+        return {"metadatas": [metadatas], "distances": [distances[0].tolist()]}

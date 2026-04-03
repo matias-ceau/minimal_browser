@@ -1,6 +1,6 @@
 # Minimal Browser Architecture & Technical Assessment
 
-> Last updated: 2025-09-25
+> Last updated: 2025-10-21
 
 ## 1. Executive Overview
 
@@ -79,15 +79,14 @@ Minimal Browser is a modal, vim-inspired Qt WebEngine shell with a tightly integ
 
 ## 6. Current Gaps & Critique
 
-1. **Documentation Debt**: README is empty and the roadmap/feature list references pre-refactor structure. No newcomer guide or architecture link.
-2. **Testing Coverage**: No automated tests (unit or integration). AI pipeline and rendering conversions are unverified.
-3. **Error Handling**: Structured fallback paths exist, but high-level UX when AI fails is limited to status messages; no retry UX or offline mode.
-4. **Dependency Footprint**: `pydantic-ai`, `chromadb`, and `boto3` are optional but installed unconditionally; evaluate extras/optional deps for startup time.
-5. **AI Configuration**: Model fallback hardcodes Claude Sonnet; there is no user-configurable hierarchy or caching of availability signals.
-6. **Rendering Extensibility**: `rendering/webapps.py` is a placeholder—no documented pattern for complex interactive experiences.
-7. **Security Posture**: Relaxed WebEngine settings (LocalContentCanAccessRemoteUrls, XSS disabled) lack compensating controls or sandbox explanation.
-8. **Storage Strategy**: Conversation logging remains a single JSON file; no rotation, search, or encryption.
-9. **Build & Tooling**: Recent refactors rely on manual `py_compile`; continuous integration, lint, or packaging checks not enforced.
+1. **Testing Coverage**: Unit tests cover AI parsing, rendering, and storage (104+ tests). Integration tests verify browser functionality. UI-specific tests are in progress.
+2. **Error Handling**: Structured fallback paths exist, but high-level UX when AI fails is limited to status messages; no retry UX or offline mode.
+3. **Dependency Footprint**: Storage dependencies (`faiss-cpu`) are optional and use OpenAI embeddings for semantic search. Uses SQLite (built-in) for metadata and local files for object storage.
+4. **AI Configuration**: Model fallback hardcodes Claude Sonnet; there is no user-configurable hierarchy or caching of availability signals.
+5. **Rendering Extensibility**: `rendering/webapps.py` is fully implemented with 5 widgets (calculator, todo, timer, notes, card).
+6. **Security Posture**: Relaxed WebEngine settings (LocalContentCanAccessRemoteUrls, XSS disabled) lack compensating controls or sandbox explanation.
+7. **Storage Strategy**: Conversation logging remains a single JSON file; no rotation, search, or encryption.
+8. **Build & Tooling**: Recent refactors rely on manual `py_compile`; continuous integration, lint, or packaging checks not enforced.
 
 ## 7. Architecture Roadmap (Next 4–6 Weeks)
 
@@ -108,7 +107,7 @@ Minimal Browser is a modal, vim-inspired Qt WebEngine shell with a tightly integ
 | OpenRouter model churn           | Loss of AI functionality when preview models vanish | Implement dynamic discovery, fallback queue configuration, cached health checks |
 | UI regressions (Wayland/Qt 6.9+) | Browser fails on non-Wayland or older Qt setups     | Add startup diagnostics, document env overrides, consider runtime checks        |
 | HTML injection via AI            | Generated HTML executed with relaxed security       | Introduce sanitization or user prompt before loading AI-generated content       |
-| Optional dependency bloat        | Slower cold start, unused packages                  | Gate optional integrations behind extras/`pyproject` optional-dependencies      |
+
 
 ## 9. References & Related Docs
 

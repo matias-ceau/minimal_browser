@@ -11,11 +11,14 @@ dependencies = [
     "requests>=2.32.5",
     "pydantic>=2.8.2",
     "pydantic-ai>=0.1.0",
-    "boto3>=1.35.0",
-    "chromadb>=0.4.24",
     "tomli-w>=1.0.0",
     "jinja2>=3.1.6",
     "pyxdg>=0.28",
+]
+
+[project.optional-dependencies]
+storage = [
+    "faiss-cpu>=1.7.4",
 ]
 
 [project.scripts]

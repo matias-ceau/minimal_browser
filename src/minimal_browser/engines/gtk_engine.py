@@ -7,16 +7,16 @@ but requires GTK 4.0 and WebKit 6.0 to be installed.
 Installation:
     Debian/Ubuntu:
         sudo apt install gir1.2-webkit-6.0 python3-gi
-    
+
     Arch Linux:
         sudo pacman -S webkit2gtk python-gobject
-    
+
     Fedora/RHEL:
         sudo dnf install webkit2gtk4.1 python3-gobject
 
 Usage:
     from minimal_browser.engines.gtk_engine import GtkWebEngine
-    
+
     engine = GtkWebEngine()
     # Use with VimBrowser or other components
 
@@ -43,7 +43,7 @@ try:
 
     gi.require_version("Gtk", "4.0")
     gi.require_version("WebKit", "6.0")
-    from gi.repository import WebKit
+    from gi.repository import Gtk, WebKit, cairo
 
     GTK_AVAILABLE = True
 except ImportError:
@@ -125,9 +125,9 @@ class GtkWebEngine(WebEngine):
         if self._widget:
             self._widget.connect(
                 "load-changed",
-                lambda webview, event: callback()
-                if event == WebKit.LoadEvent.STARTED
-                else None,
+                lambda webview, event: (
+                    callback() if event == WebKit.LoadEvent.STARTED else None
+                ),
             )
 
     def set_load_progress_callback(self, callback: Callable[[int], None]):
@@ -145,9 +145,9 @@ class GtkWebEngine(WebEngine):
         if self._widget:
             self._widget.connect(
                 "load-changed",
-                lambda webview, event: callback(True)
-                if event == WebKit.LoadEvent.FINISHED
-                else None,
+                lambda webview, event: (
+                    callback(True) if event == WebKit.LoadEvent.FINISHED else None
+                ),
             )
 
     def run_javascript(self, script: str):
@@ -170,30 +170,45 @@ class GtkWebEngine(WebEngine):
 
     def capture_screenshot(self, callback: Callable[[bytes], None]):
         """Capture a screenshot of the current page asynchronously
-        
+
         Args:
             callback: Function to call with PNG image data as bytes
-            
-        Note:
-            GTK WebKit screenshot functionality requires additional GTK
-            rendering APIs. This is a placeholder implementation that
-            returns empty bytes. Full implementation would require:
-            - GTK snapshot APIs (gtk_widget_snapshot)
-            - Cairo surface to PNG conversion
         """
         if not self._widget:
             print("Cannot capture screenshot: widget not available")
             callback(b"")
             return
-        
-        # TODO: Implement GTK-based screenshot capture
-        # This would require:
-        # 1. Use gtk_widget_snapshot() to capture widget as GtkSnapshot
-        # 2. Convert snapshot to cairo surface
-        # 3. Write cairo surface to PNG in memory
-        # 4. Return PNG bytes via callback
-        print("Screenshot capture not yet implemented for GTK WebEngine")
-        callback(b"")
+
+        def capture_from_webview(webview, result, user_data):
+            try:
+                texture = webview.get_screenshot_finish(result)
+                if texture is None:
+                    print("Screenshot capture returned no texture")
+                    callback(b"")
+                    return
+
+                width = texture.get_width()
+                height = texture.get_height()
+                surface = cairo.ImageSurface(cairo.Format.ARGB32, width, height)
+                context = cairo.Context(surface)
+
+                texture.download(context)
+
+                import io
+
+                buffer = io.BytesIO()
+                surface.write_to_png(buffer)
+                callback(buffer.getvalue())
+
+            except Exception as e:
+                print(f"Screenshot capture failed: {e}")
+                callback(b"")
+
+        try:
+            self._widget.get_screenshot(None, capture_from_webview, None)
+        except Exception as e:
+            print(f"Failed to initiate screenshot capture: {e}")
+            callback(b"")
 
     @property
     def engine_name(self) -> str:
