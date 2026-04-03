@@ -6,22 +6,27 @@ import json
 import mimetypes
 import sqlite3
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
+
+if TYPE_CHECKING:
+    import faiss
+    import numpy as np
+    from openai import OpenAI
 
 try:
     import faiss  # type: ignore[import-untyped]
-    import numpy as np
-except ImportError as exc:  # pragma: no cover - optional dependency guard
-    raise ImportError(
-        "faiss-cpu and numpy are required for file browser embeddings; install minimal-browser with the 'storage' extras."
-    ) from exc
+    import numpy as np  # noqa: F401
+
+    FAISS_AVAILABLE = True
+except ImportError:  # pragma: no cover - optional dependency guard
+    FAISS_AVAILABLE = False
 
 try:
-    from openai import OpenAI
-except ImportError as exc:  # pragma: no cover
-    raise ImportError(
-        "openai is required for embeddings; ensure it is installed."
-    ) from exc
+    from openai import OpenAI  # noqa: F401
+
+    OPENAI_AVAILABLE = True
+except ImportError:  # pragma: no cover
+    OPENAI_AVAILABLE = False
 
 
 EMBEDDING_MODEL = "text-embedding-3-small"
@@ -38,6 +43,11 @@ def _get_embedding(text: str, client: Optional[OpenAI] = None) -> List[float]:
     Returns:
         Embedding vector as list of floats
     """
+    if not OPENAI_AVAILABLE:
+        raise ImportError(
+            "openai is required for embeddings; install with 'uv sync --extra storage'"
+        )
+
     if client is None:
         client = OpenAI()
 
@@ -180,6 +190,17 @@ class FileIndexer:
             db_path: Path to store index and metadata, defaults to ~/.minimal-browser/file_index/
             client: Optional OpenAI client instance
         """
+        if not FAISS_AVAILABLE:
+            raise ImportError(
+                "faiss-cpu is required for FileIndexer; "
+                "install with 'uv sync --extra storage'"
+            )
+
+        if not OPENAI_AVAILABLE:
+            raise ImportError(
+                "openai is required for embeddings; install with 'uv sync --extra storage'"
+            )
+
         if db_path is None:
             db_path = Path.home() / ".minimal-browser" / "file_index"
 
@@ -215,6 +236,8 @@ class FileIndexer:
 
     def _load_or_create_index(self) -> None:
         """Load existing index or create new one."""
+        import faiss
+
         index_path = self.db_path / "index.faiss"
         counter_path = self.db_path / "counter.json"
 
@@ -228,6 +251,8 @@ class FileIndexer:
 
     def _save_index(self) -> None:
         """Save index and counter to disk."""
+        import faiss
+
         if self.index is None:
             return
 
@@ -247,6 +272,9 @@ class FileIndexer:
             path: Path to the file
             content: File content to index
         """
+        import faiss
+        import numpy as np
+
         if self.index is None:
             return
 
@@ -326,6 +354,9 @@ class FileIndexer:
         Returns:
             List of matching files with metadata
         """
+        import faiss
+        import numpy as np
+
         if self.index is None or self.index.ntotal == 0:
             return []
 
